@@ -1,10 +1,12 @@
 # vero
 
-**Desktop applications whose logic is written once, in Go, and whose interface
-is the platform's own toolkit.**
+**Write one Go app on a Mac, and build native applications for macOS, Windows
+and Linux — all from that Mac.**
 
-Your Go code runs as a separate process. The interface is SwiftUI on macOS,
-WPF on Windows and GTK on Linux, and the two halves talk over pipes.
+- Write the logic once, in Go.
+- Draw each interface with the platform's own toolkit: SwiftUI, WPF, GTK.
+- The two halves talk over pipes.
+- Build and run all three from one Mac.
 
 <table>
 <tr>
@@ -29,18 +31,18 @@ worker. Each uses that platform's stock controls, with no styling applied.
                  └─────────┘
 ```
 
-If you already have Xcode and Go installed, the example below takes about two
-minutes and gives you a running app.
-
 ## Example
 
-### Setup
+A macOS app with a Go worker behind it, in four steps. With Xcode and Go already
+installed it takes about two minutes.
 
-Create a new macOS SwiftUI Xcode project, then:
+### 1. Create the project and add vero
+
+Create a new macOS SwiftUI Xcode project, then add the package:
 
 - File -> Add Package Dependencies... -> `https://github.com/calmdocs/vero`
 
-### Build the worker
+### 2. Build the worker
 
 ```bash
 git clone https://github.com/calmdocs/vero
@@ -56,7 +58,9 @@ Drag `worker` into your Xcode project.
 That is the only binary you build. The C archive vero links is the same for
 every application, so the Swift package ships it.
 
-### In the new Xcode project, replace ContentView.swift with the following code:
+### 3. Write the interface
+
+Replace `ContentView.swift` with this:
 
 ```swift
 import SwiftUI
@@ -134,13 +138,15 @@ final class Model: ObservableObject {
 }
 ```
 
-Run it. Three jobs appear, their progress moves, and the button sends a request
-back to the worker.
+### 4. Run it
 
-### The go side
+Three jobs appear, their progress moves, and the button sends a request back to
+the worker.
 
-The worker is [example/worker/main.go](example/worker/main.go), and this is all
-of the interface to Swift:
+### The Go side
+
+The worker is [example/worker/main.go](example/worker/main.go). This is all of
+its interface to Swift:
 
 ```go
 r := vero.NewRouter()
@@ -155,35 +161,42 @@ go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
 w.Serve(r)
 ```
 
-## Windows and Linux
+## The three examples
 
-The same worker, behind WPF and GTK4. Each example is small and has a README.
+The same worker behind three interfaces. Each one is small and has a README.
 
-- [example/wpf-app](example/wpf-app) - C#
-- [example/gtk-app](example/gtk-app) - Python
-- [example/menubar-app](example/menubar-app) - the macOS example above, as a menu bar app
+- **macOS** (SwiftUI) — [example/menubar-app](example/menubar-app), the example
+  above as a menu bar app
+- **Windows** (WPF, C#) — [example/wpf-app](example/wpf-app)
+- **Linux** (GTK4, Python) — [example/gtk-app](example/gtk-app)
 
-You can build and run all three from the Mac:
+Build and run all three from the Mac, with two commands:
 
 ```bash
-./scripts/setup.sh                                   # toolchains, then build
-./scripts/run.sh --iso ~/Downloads/win11.iso         # opens all three
+./scripts/setup.sh                                   # install toolchains, then build
+./scripts/run.sh --iso ~/Downloads/win11.iso         # open all three
 ```
 
-| script | |
+The `--iso` is a Windows 11 Arm64 ISO, and is only needed the first time:
+`run.sh` installs Windows into a VM once, and reuses it after that.
+
+| Script | What it does |
 |---|---|
-| `scripts/setup.sh` | installs whatever toolchain is missing, then builds everything |
-| `scripts/run.sh` | opens the example on all three at once |
-| `scripts/build-all.sh` | every artefact, for all three, into `dist/` |
-| `scripts/release.sh` | one archive per platform, plus checksums |
-| `scripts/run-linux.sh` | the GTK example in a window on your Mac |
-| `scripts/run-windows.sh` | a Windows VM with your build on a disc |
+| `scripts/setup.sh` | installs any missing toolchain, then builds everything |
+| `scripts/build-all.sh` | builds every artefact, for all three platforms, into `dist/` |
+| `scripts/run.sh` | opens the example on all three platforms at once |
+| `scripts/run-linux.sh` | runs the GTK example in a window on your Mac |
+| `scripts/run-windows.sh` | runs a Windows VM with your build on a disc |
+| `scripts/release.sh` | packages one archive per platform, plus checksums |
+
+[Building and running from a Mac](docs/building.md) is what these scripts do,
+written out step by step.
 
 ## More
 
 - [How it fits together](docs/design.md) - what runs where, and why pipes
 - [The protocol](docs/protocol.md) - the wire format, errors, the single-worker lock
-- [Building and running from a Mac](docs/building.md) - the long way round, by hand
+- [Building and running from a Mac](docs/building.md) - every build command, by hand
 - [The styling](docs/styling.md) - the same examples with a design on them
 
 ## Tests

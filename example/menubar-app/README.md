@@ -19,34 +19,34 @@ VERO_EXAMPLE_WINDOW=1 ./.build/debug/MenuBarExample
 
 ## What to look at
 
-`Model.swift` is the whole interface to Go, and it is short. `VeroClient` copies
-the worker out of the bundle when the copy on disk is missing or older, launches
-it, supervises it, and restarts it if it dies — none of which is in this
-example, because none of it should be.
+`Model.swift` is the whole interface to Go.
 
-The requests are types: `StatusRequest` and `RestartJob` each name the handler
-on the worker they are routed to and declare what comes back, so the call site
-gets a `Status` rather than bytes to guess at.
+- `VeroClient` copies the worker out of the bundle when the copy on disk is
+  missing or older, launches it, and restarts it if it dies.
+- `StatusRequest` and `RestartJob` are types. Each names the handler on the
+  worker it is routed to and declares what comes back, so a call returns a
+  `Status`.
+- Events arrive on the main actor, so they can go straight into published
+  state.
 
-Events arrive already on the main actor, so they can go straight into published
-state.
+## Why this example links the archive itself
 
-## Why this links the archive itself
+Your own application adds vero as a versioned package, and the C archive comes
+with it. This example instead uses a path dependency on `../..`, so it builds
+against the checkout rather than the last published version. A checkout has no
+release to take the archive from, so `build.sh` builds `libvero.a` first and the
+app links it with `-L. -lvero`.
 
-An application adds vero as a versioned package, and the archive comes with it.
-This example uses a path dependency on `../..` instead, and links the archive
-itself with `-L. -lvero`, which is why `build.sh` builds `libvero.a` first.
+## Shipping a real app
 
-A tagged release ships the archive inside the package; a working tree has no
-release. Using a path dependency means this example builds against the checkout
-rather than the last published version.
+This example is a SwiftPM executable rather than an application bundle, so the
+worker sits beside the binary. Vero looks there when `Bundle.main` has no
+resource by that name.
 
-## Shipping one
+A real application instead:
 
-This example is a SwiftPM executable, not an application bundle, so the worker
-sits beside the binary — vero looks there when `Bundle.main` has no resource by
-that name. A real app carries it in `Contents/Resources` and links `libvero.a`
-under "Link Binary With Libraries" in Xcode.
+- carries the worker in `Contents/Resources`
+- adds the `Vero` package, which brings the C archive with it
 
-Build the archive universal, or the app will only run on one architecture. The
+Build the worker universal, or the app will only run on one architecture. The
 top-level README has the two `lipo` lines.

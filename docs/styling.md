@@ -1,9 +1,9 @@
 # The styling
 
-The examples in this repository use stock controls, with no styling.
+The examples in this repository use stock controls, with no styling applied.
 
-They were styled before. This page keeps both versions and the code that made
-the difference.
+This page shows the same three examples with a design on top, and the code that
+does it.
 
 ## Before and after
 
@@ -20,8 +20,8 @@ the difference.
 </tr>
 </table>
 
-Same widgets, same worker, same behaviour in both rows. Nothing below changes a
-single call into vero.
+Both rows use the same widgets, the same worker and the same behaviour. None of
+the code below changes a call into vero.
 
 ## Linux — 51 lines of CSS
 

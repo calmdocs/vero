@@ -10,7 +10,8 @@ messages between the two. It is Go, embedded in your application as a C
 archive, so the connection handling is written once rather than per platform.
 
 **The interface** is native, and talks to the supervisor through nine C
-functions.
+functions. Each platform has a binding that wraps them: Swift for macOS, Python
+for Linux, C# for Windows.
 
 ## The worker
 
@@ -54,8 +55,9 @@ struct GetGroups: NamedRequest {
 }
 ```
 
-`VeroClient` publishes `state`, `restarts`, `inFlight` and `isBusy` as observable
-properties. `Vero` underneath is the same thing as a plain async API.
+`VeroClient` publishes `state`, `restarts`, `inFlight` and `isBusy` as
+observable properties. `Vero`, underneath it, is the same client as a plain
+async API, for when you are not using SwiftUI.
 
 `VeroClient(bundledWorker:)` copies the worker out of the application bundle to
 a writable directory before running it, and replaces the copy when the bundled
@@ -90,8 +92,8 @@ system created when the supervisor launched the worker.
 - When the application exits, for any reason, the worker's standard input closes
   and the worker exits with it. There is no PID file and no heartbeat.
 
-The trade is that only the parent process can talk to the worker. For several
-clients attached to one running worker, use a socket:
+The trade-off is that only the parent process can talk to the worker. If you
+need several clients attached to one running worker, use a socket instead:
 [keyexchange](https://github.com/calmdocs/keyexchange) and
 [SwiftKeyExchange](https://github.com/calmdocs/SwiftKeyExchange) are the
 calmdocs libraries for that.

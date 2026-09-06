@@ -1,9 +1,9 @@
 # Windows example
 
-The same worker and the same protocol as the macOS and Linux examples, drawn
-with WPF.
+A WPF interface for the Go worker in `../worker`. Same worker and same protocol
+as the macOS and Linux examples.
 
-On Windows:
+To build and run it on Windows:
 
 ```powershell
 .\build.ps1
@@ -27,23 +27,24 @@ dotnet publish -c Release -r win-arm64 --self-contained \
 cp vero.dll worker.exe out/
 ```
 
-Swap `arm64`/`win-arm64` for `amd64`/`win-x64` on an x64 machine, and use
-`CC=x86_64-w64-mingw32-gcc` from `brew install mingw-w64`. `vero.dll` is loaded
-by name and the worker is looked for beside the executable, so both keep those
-names.
+On an x64 machine, swap `arm64` for `amd64` and `win-arm64` for `win-x64`, and
+use `CC=x86_64-w64-mingw32-gcc` from `brew install mingw-w64`.
 
-## Build for the architecture you will run on
+Keep both file names. `vero.dll` is loaded by name, and the worker is looked for
+beside the executable.
+
+To run it from the Mac, `scripts/run-windows.sh` in the repository root builds
+this app, puts it on a disc image and boots a Windows VM with it:
+
+```bash
+../../scripts/run-windows.sh
+```
+
+## Build the library for the architecture you will run on
 
 A `windows/amd64` build of `vero.dll`, loaded into an x64 .NET process running
 under emulation on Windows-on-ARM, does not work: the first call into Go either
-never returns or takes the process down with `0xC0000409`, before anything is
-printed. Built natively for `windows/arm64` the identical code is fine.
+never returns or ends the process with `0xC0000409`. Built for `windows/arm64`
+the same code runs correctly.
 
-The plain Go worker is unaffected either way — it is only the shared library
-that minds.
-
-## What is verified
-
-The binding, this example and the worker have been run end to end on Windows 11
-on ARM: started, events, requests, restarts and shutdown. The recording in the
-top-level README is this app running.
+This applies only to the shared library. The plain Go worker is unaffected.
