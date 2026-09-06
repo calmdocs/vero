@@ -12,6 +12,9 @@ public enum VeroError: Error, LocalizedError {
     /// The worker is not running: it is starting, restarting after a crash,
     /// or has been stopped. Wait rather than treating it as a failure.
     case notRunning
+    /// Another copy of this application is already running a worker. Offer
+    /// to switch to it: retrying will not help, and nothing is broken.
+    case alreadyRunning(String)
     /// The reply could not be decoded into the type you asked for.
     case badReply(String)
     /// Something else went wrong: the request could not be encoded, or the
@@ -22,6 +25,7 @@ public enum VeroError: Error, LocalizedError {
         switch self {
         case .refused(let message): return message
         case .notRunning: return "the worker is not running"
+        case .alreadyRunning(let message): return message
         case .badReply(let message): return "could not read the reply: \(message)"
         case .failed(let message): return message
         }
@@ -211,6 +215,7 @@ public final class Vero {
         struct Envelope: Decodable { let e: String?; let code: String? }
         if let envelope = try? JSONDecoder().decode(Envelope.self, from: data), let message = envelope.e {
             switch envelope.code {
+            case "already_running": throw VeroError.alreadyRunning(message)
             case "not_running": throw VeroError.notRunning
             case "refused": throw VeroError.refused(message)
             default: throw VeroError.failed(message)

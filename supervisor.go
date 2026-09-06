@@ -43,6 +43,16 @@ type SupervisorOptions struct {
 	// relaunched as fast as the machine can fork.  Zero means 200ms and 30s.
 	Backoff    time.Duration
 	MaxBackoff time.Duration
+
+	// Lock keys the single-worker lock: one process at a time supervises a
+	// worker under a given key.  Empty means the worker's own path, which is
+	// what you want unless two applications share a binary and should still
+	// be allowed to run at once - then give them a key each.
+	Lock string
+
+	// NoLock turns the lock off, for a program that genuinely wants several
+	// workers at once.
+	NoLock bool
 }
 
 // State is what the supervisor last saw the worker doing.
@@ -90,6 +100,9 @@ type Supervisor struct {
 	stopOnce sync.Once
 	done     chan struct{}
 	restarts int
+
+	lock     *os.File // the single-worker lock, held until Stop or exit
+	startErr error    // why there is no worker at all, if there is not
 }
 
 // Supervise launches the worker and keeps it alive until Stop.
@@ -110,8 +123,29 @@ func Supervise(opts SupervisorOptions) *Supervisor {
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
 	}
+	// Before the goroutine: a caller that asks Err() straight away should get
+	// a straight answer, not a race.
+	if !opts.NoLock {
+		if err := s.acquireLock(); err != nil {
+			s.startErr = err
+			s.state = Stopped
+			close(s.done)
+			return s
+		}
+	}
+
 	go s.supervise()
 	return s
+}
+
+// Err reports why the worker never started, or nil.
+//
+// The one that matters is ErrAlreadyRunning: another process holds the lock,
+// so this Supervisor will not run a worker at all.
+func (s *Supervisor) Err() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.startErr
 }
 
 // State reports what the worker is doing now.
@@ -160,6 +194,13 @@ func (s *Supervisor) Call(ctx context.Context, name string, request any) (json.R
 	}
 
 	s.mu.Lock()
+	if s.startErr != nil {
+		err := s.startErr
+		s.mu.Unlock()
+		// Say which of the two it is.  "Not running" invites waiting for a
+		// worker that is never going to arrive.
+		return nil, err
+	}
 	if s.state != Running || s.enc == nil {
 		s.mu.Unlock()
 		return nil, ErrWorkerNotRunning
@@ -209,6 +250,7 @@ func (s *Supervisor) Stop() error {
 	case <-s.done:
 	case <-time.After(5 * time.Second):
 	}
+	s.releaseLock()
 	return nil
 }
 

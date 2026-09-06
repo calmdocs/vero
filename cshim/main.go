@@ -117,6 +117,12 @@ func VeroStart(workerPath *C.char, argsJSON *C.char) *C.char {
 		},
 	})
 
+	// Another process already has this worker.  Say so now rather than
+	// leaving an interface waiting for something that will never start.
+	if err := s.Err(); err != nil {
+		return cstring(errEnvelope(err))
+	}
+
 	mu.Lock()
 	sup = s
 	mu.Unlock()
@@ -271,6 +277,10 @@ func errEnvelope(err error) string {
 	switch {
 	case errors.As(err, &remote):
 		e["e"], e["code"] = remote.Message, "refused"
+	case errors.Is(err, vero.ErrAlreadyRunning):
+		// Its own code: an interface should offer to switch to the copy that
+		// is running, not retry or report a fault.
+		e["code"] = "already_running"
 	case errors.Is(err, vero.ErrWorkerNotRunning):
 		e["code"] = "not_running"
 	}

@@ -44,6 +44,15 @@ public sealed class RefusedException : VeroException
 /// The worker is starting, restarting after a crash, or stopped. Nothing you
 /// did was wrong: wait, and say so in the interface.
 /// </summary>
+/// <summary>
+/// Another process is already running a worker for this application. Offer to
+/// switch to the copy that is running: retrying will not help.
+/// </summary>
+public sealed class AlreadyRunningException : VeroException
+{
+    public AlreadyRunningException(string message) : base(message) { }
+}
+
 public sealed class NotRunningException : VeroException
 {
     public NotRunningException(string message) : base(message) { }
@@ -201,6 +210,7 @@ public sealed class VeroClient : IDisposable
             string code = root.TryGetProperty("code", out JsonElement c) ? c.GetString() ?? "" : "";
             throw code switch
             {
+                "already_running" => new AlreadyRunningException(message),
                 "not_running" => new NotRunningException(message),
                 "refused" => new RefusedException(message),
                 _ => new VeroException(message),

@@ -42,6 +42,14 @@ class Refused(VeroError):
     """
 
 
+class AlreadyRunning(VeroError):
+    """Another process is already running a worker for this application.
+
+    Offer to switch to the copy that is running: retrying will not help, and
+    nothing is broken.
+    """
+
+
 class NotRunning(VeroError):
     """The worker is starting, restarting after a crash, or stopped.
 
@@ -98,6 +106,8 @@ class Vero:
         message = envelope.get("e")
         if message is not None:
             code = envelope.get("code")
+            if code == "already_running":
+                raise AlreadyRunning(message)
             if code == "not_running":
                 raise NotRunning(message)
             if code == "refused":

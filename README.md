@@ -192,6 +192,37 @@ The one requirement is to call `NewWorker` before starting any goroutine, since
 it reassigns a package-level variable. Anything printing concurrently with that
 is a data race, and the race detector will say so.
 
+## One worker at a time
+
+Two copies of an application - the one in `/Applications` and the one still in
+`~/Downloads` after an update - are two processes with the same bundle
+identifier, and macOS will run both. Without something stopping it, each starts
+a worker and both work on the same state. One window too many is a nuisance;
+two workers is corruption.
+
+So a `Supervisor` takes an exclusive lock before it starts anything, keyed by
+default on the worker's path:
+
+```go
+s := vero.Supervise(vero.SupervisorOptions{Path: worker})
+if errors.Is(s.Err(), vero.ErrAlreadyRunning) {
+    // offer to switch to the copy that is running
+}
+```
+
+Requests to a supervisor that never got the lock return `ErrAlreadyRunning`
+rather than `ErrWorkerNotRunning`, because the two want different responses:
+one is worth waiting out, the other never resolves. The bindings raise
+`alreadyRunning` in Swift, `AlreadyRunning` in Python and
+`AlreadyRunningException` in C#.
+
+The lock is held by an open file - `flock` on Unix, `LockFileEx` on Windows -
+so the operating system drops it when the process does, crash included. There
+is no stale lock to clear by hand.
+
+`Lock` sets the key, for two applications that share a worker binary and should
+still both run. `NoLock` turns it off.
+
 ## Errors
 
 A handler returns `(reply, error)`. Return an error and the interface gets the
