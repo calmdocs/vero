@@ -30,6 +30,25 @@ answers the keyboard the way a button on that platform does, because it *is*
 one. Nothing is polling either — the progress moving is the worker pushing an
 event each time its state changes.
 
+### How much of that is vero?
+
+None of it. The three recordings are styled — about fifty lines of it per
+platform — and it is worth seeing what is underneath, because the styling is the
+part that is *not* the point.
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/screenshots/linux-stock.gif" width="100%"><br><sub><b>stock GTK widgets</b> — the stylesheet removed, nothing else changed</sub></td>
+<td align="center" width="50%"><img src="docs/screenshots/linux.gif" width="100%"><br><sub><b>the same example</b> — with its 51 lines of CSS</sub></td>
+</tr>
+</table>
+
+Same widgets, same worker, same behaviour. The left is what you get for free;
+the right is what a designer does to it afterwards. Every example here is styled
+so the three platforms read as one application, which makes a better screenshot
+— but if you start from the example in this README you will get something
+closer to the left, and that is the honest starting point.
+
 ```
    SwiftUI           WPF             GTK
   ┌─────────┐    ┌─────────┐    ┌─────────┐
