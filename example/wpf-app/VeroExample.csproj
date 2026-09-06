@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <RootNamespace>VeroExample</RootNamespace>
+    <AssemblyName>VeroExample</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../bindings/csharp/Vero.cs" Link="Vero.cs"/>
+  </ItemGroup>
+</Project>

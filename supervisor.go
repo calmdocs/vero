@@ -1,0 +1,369 @@
+package vero
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"sync"
+	"time"
+)
+
+// SupervisorOptions describes the worker to run and who to tell about it.
+//
+// The callbacks are called from the supervisor's own goroutines, never on the
+// interface's main thread.  Whatever you do in them, hop to the main thread
+// before touching the interface.
+type SupervisorOptions struct {
+	// Path is the worker binary.  Args are passed to it verbatim, so the
+	// application keeps its own command line.
+	Path string
+	Args []string
+
+	// Dir and Env, if set, are the worker's working directory and
+	// environment.  VERO_SERVE is added to Env either way.
+	Dir string
+	Env []string
+
+	// OnEvent receives every event the worker emits, in order.
+	OnEvent func(event json.RawMessage)
+
+	// OnLog receives the worker's standard error, a line at a time.  Workers
+	// log there precisely so this does not have to guess at framing.
+	OnLog func(line string)
+
+	// OnStateChange is told when the worker starts, dies, or is given up on.
+	OnStateChange func(State)
+
+	// Backoff is the wait before the first restart, doubling up to
+	// MaxBackoff.  A worker that crashes on startup would otherwise be
+	// relaunched as fast as the machine can fork.  Zero means 200ms and 30s.
+	Backoff    time.Duration
+	MaxBackoff time.Duration
+}
+
+// State is what the supervisor last saw the worker doing.
+type State int
+
+const (
+	// Starting means a worker is being launched, including a restart.
+	Starting State = iota
+	// Running means a worker is up and answering.
+	Running
+	// Restarting means one died and another is on the way.
+	Restarting
+	// Stopped means Stop was called; nothing further will be launched.
+	Stopped
+)
+
+func (s State) String() string {
+	switch s {
+	case Starting:
+		return "starting"
+	case Running:
+		return "running"
+	case Restarting:
+		return "restarting"
+	case Stopped:
+		return "stopped"
+	}
+	return "unknown"
+}
+
+// Supervisor runs a worker, keeps it running, and talks to it.
+type Supervisor struct {
+	opts SupervisorOptions
+
+	mu      sync.Mutex
+	state   State
+	stdin   io.WriteCloser
+	enc     *json.Encoder
+	nextID  uint64
+	pending map[uint64]chan Envelope
+	latest  json.RawMessage
+	cmd     *exec.Cmd
+
+	stop     chan struct{}
+	stopOnce sync.Once
+	done     chan struct{}
+	restarts int
+}
+
+// Supervise launches the worker and keeps it alive until Stop.
+//
+// It returns immediately; the worker comes up on its own goroutine.  Requests
+// made before it is ready return ErrWorkerNotRunning rather than blocking, so
+// an interface can draw itself at once and show that it is waiting.
+func Supervise(opts SupervisorOptions) *Supervisor {
+	if opts.Backoff <= 0 {
+		opts.Backoff = 200 * time.Millisecond
+	}
+	if opts.MaxBackoff <= 0 {
+		opts.MaxBackoff = 30 * time.Second
+	}
+	s := &Supervisor{
+		opts:    opts,
+		pending: map[uint64]chan Envelope{},
+		stop:    make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+	go s.supervise()
+	return s
+}
+
+// State reports what the worker is doing now.
+func (s *Supervisor) State() State {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state
+}
+
+// Restarts counts how many times the worker has been relaunched after dying.
+func (s *Supervisor) Restarts() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.restarts
+}
+
+// Latest returns the most recent event, or nil before the first one.
+//
+// An interface that has just drawn a window needs the current state without
+// waiting for the next change, and this is that.  Events keep it up to date
+// afterwards.
+func (s *Supervisor) Latest() json.RawMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.latest
+}
+
+// Request sends a request and waits for its reply.
+//
+// A handler's error comes back as *RemoteError, which is worth telling apart
+// from ErrWorkerNotRunning: one means the worker refused what you asked, the
+// other that it is not there to ask.
+func (s *Supervisor) Request(ctx context.Context, request any) (json.RawMessage, error) {
+	return s.Call(ctx, "", request)
+}
+
+// Call sends a request to the handler registered under name, for a worker
+// using a Router.
+//
+// The name travels beside the payload rather than inside it, so an
+// application's own message types stay exactly as it defined them.
+func (s *Supervisor) Call(ctx context.Context, name string, request any) (json.RawMessage, error) {
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("vero: cannot encode request: %w", err)
+	}
+
+	s.mu.Lock()
+	if s.state != Running || s.enc == nil {
+		s.mu.Unlock()
+		return nil, ErrWorkerNotRunning
+	}
+	s.nextID++
+	id := s.nextID
+	ch := make(chan Envelope, 1)
+	s.pending[id] = ch
+	err = s.enc.Encode(Envelope{ID: id, Name: name, Payload: payload})
+	s.mu.Unlock()
+
+	if err != nil {
+		s.forget(id)
+		return nil, ErrWorkerNotRunning
+	}
+
+	select {
+	case reply := <-ch:
+		if reply.Error != "" {
+			return nil, &RemoteError{Message: reply.Error}
+		}
+		return reply.Payload, nil
+	case <-ctx.Done():
+		s.forget(id)
+		return nil, ctx.Err()
+	case <-s.stop:
+		s.forget(id)
+		return nil, ErrWorkerNotRunning
+	}
+}
+
+func (s *Supervisor) forget(id uint64) {
+	s.mu.Lock()
+	delete(s.pending, id)
+	s.mu.Unlock()
+}
+
+// Stop shuts the worker down and waits for it to go.
+//
+// Closing its standard input is the whole shutdown protocol: Run returns, the
+// process exits, and anything it was holding is released the way it would be
+// on any other exit.  A worker that ignores that is killed after a grace
+// period.
+func (s *Supervisor) Stop() error {
+	s.stopOnce.Do(func() { close(s.stop) })
+	select {
+	case <-s.done:
+	case <-time.After(5 * time.Second):
+	}
+	return nil
+}
+
+func (s *Supervisor) setState(st State) {
+	s.mu.Lock()
+	s.state = st
+	s.mu.Unlock()
+	if s.opts.OnStateChange != nil {
+		s.opts.OnStateChange(st)
+	}
+}
+
+func (s *Supervisor) supervise() {
+	defer close(s.done)
+	backoff := s.opts.Backoff
+
+	for {
+		select {
+		case <-s.stop:
+			s.setState(Stopped)
+			return
+		default:
+		}
+
+		s.setState(Starting)
+		err := s.runOnce()
+
+		select {
+		case <-s.stop:
+			s.setState(Stopped)
+			return
+		default:
+		}
+
+		s.mu.Lock()
+		s.restarts++
+		s.mu.Unlock()
+		if s.opts.OnLog != nil && err != nil {
+			s.opts.OnLog(fmt.Sprintf("vero: worker exited: %v", err))
+		}
+		s.setState(Restarting)
+
+		select {
+		case <-time.After(backoff):
+		case <-s.stop:
+			s.setState(Stopped)
+			return
+		}
+		if backoff *= 2; backoff > s.opts.MaxBackoff {
+			backoff = s.opts.MaxBackoff
+		}
+	}
+}
+
+// runOnce launches one worker and returns when it exits.
+func (s *Supervisor) runOnce() error {
+	cmd := exec.Command(s.opts.Path, s.opts.Args...)
+	hideConsole(cmd)
+	cmd.Dir = s.opts.Dir
+	env := s.opts.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	cmd.Env = append(append([]string{}, env...), envServe+"=1")
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.stdin, s.enc, s.cmd = stdin, json.NewEncoder(stdin), cmd
+	s.mu.Unlock()
+	s.setState(Running)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); s.readEvents(stdout) }()
+	go func() { defer wg.Done(); s.readLogs(stderr) }()
+
+	// Stop closes stdin, which is how a worker is asked to leave.
+	shutdown := make(chan struct{})
+	go func() {
+		select {
+		case <-s.stop:
+			stdin.Close()
+			select {
+			case <-shutdown:
+			case <-time.After(3 * time.Second):
+				cmd.Process.Kill() // it ignored us
+			}
+		case <-shutdown:
+		}
+	}()
+
+	waitErr := cmd.Wait()
+	close(shutdown)
+	wg.Wait()
+
+	// Nothing is coming back for anything still outstanding.
+	s.mu.Lock()
+	s.enc, s.stdin = nil, nil
+	for id, ch := range s.pending {
+		close(ch)
+		delete(s.pending, id)
+	}
+	s.mu.Unlock()
+	return waitErr
+}
+
+func (s *Supervisor) readEvents(r io.Reader) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64<<10), MaxLineSize)
+	for sc.Scan() {
+		var e Envelope
+		if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
+			continue // a half written line from a dying worker
+		}
+		switch e.Kind {
+		case kindEvent:
+			s.mu.Lock()
+			s.latest = e.Payload
+			s.mu.Unlock()
+			if s.opts.OnEvent != nil {
+				s.opts.OnEvent(e.Payload)
+			}
+		case kindReply:
+			s.mu.Lock()
+			ch, ok := s.pending[e.ID]
+			delete(s.pending, e.ID)
+			s.mu.Unlock()
+			if ok {
+				ch <- e
+			}
+		}
+	}
+}
+
+func (s *Supervisor) readLogs(r io.Reader) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 8<<10), MaxLineSize)
+	for sc.Scan() {
+		if s.opts.OnLog != nil {
+			s.opts.OnLog(sc.Text())
+		}
+	}
+}
