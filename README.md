@@ -148,6 +148,13 @@ final class Model: ObservableObject {
 Run it. Three jobs appear and their progress moves, pushed from Go as it
 changes - nothing polls. The button sends a request back.
 
+It will not look like the recordings above. Those are
+[example/menubar-app](example/menubar-app) and its Windows and Linux
+counterparts: the same worker, the same three jobs, with a few hundred lines of
+styling on top. This is the same thing with the styling left out, so that what
+you have to read is the part that talks to Go. Take the styling from there once
+it runs.
+
 ### The go side
 
 The worker is [example/worker/main.go](example/worker/main.go), and this is all
