@@ -27,21 +27,6 @@ public record Job(
         _ => "□",
     };
 
-    public Brush BadgeForeground => Phase switch
-    {
-        "done" => new SolidColorBrush(Color.FromRgb(0x5C, 0x9E, 0x75)),
-        "uploading" => new SolidColorBrush(Color.FromRgb(0x5C, 0x82, 0xB0)),
-        _ => new SolidColorBrush(Color.FromRgb(0x94, 0x94, 0x99)),
-    };
-
-    public Brush BadgeBackground
-    {
-        get
-        {
-            var c = ((SolidColorBrush)BadgeForeground).Color;
-            return new SolidColorBrush(Color.FromArgb(0x29, c.R, c.G, c.B));
-        }
-    }
 }
 
 public record Status(

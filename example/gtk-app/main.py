@@ -32,66 +32,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # because "looking for changes" is not a warning and should not look like one,
 # and only finishing earns a colour. That is what leaves amber worth noticing
 # when something is actually wrong.
-CSS = b"""
-window { background: #1c1c1e; }
-.title { font-size: 19px; font-weight: bold; color: #f2f2f2; }
-.count, .state { color: #949499; font-size: 12px; }
-.card { background: #262628; border-radius: 10px; padding: 14px; }
-.job { font-size: 15px; font-weight: bold; color: #f2f2f2; }
-.sub { font-size: 12px; color: #949499; }
-.icon { color: #949499; }
-button.icon-button {
-    background: none;
-    background-image: none;
-    border: none;
-    box-shadow: none;
-    padding: 4px;
-    min-width: 0;
-    min-height: 0;
-}
-button.icon-button:hover {
-    background-color: alpha(#ffffff, 0.07);
-    border-radius: 8px;
-}
-.badge {
-    font-size: 11px;
-    font-weight: bold;
-    padding: 4px 10px;
-    border-radius: 11px;
-    background: alpha(#949499, 0.16);
-    color: #949499;
-}
-.badge.done   { background: alpha(#5c9e75, 0.16); color: #5c9e75; }
-.badge.upload { background: alpha(#5c82b0, 0.16); color: #5c82b0; }
-.dot  { color: #5c9e75; font-size: 11px; }
-.sep  { background: #333335; min-height: 1px; }
-/* GTK4 nests these, and the theme paints the fill with a background-image
-   gradient - so the shorthand alone leaves it looking empty. Both have to be
-   set, and the image cleared. */
-progressbar > trough {
-    min-height: 6px;
-    background-color: #38383a;
-    background-image: none;
-    border: none;
-    border-radius: 3px;
-}
-progressbar > trough > progress {
-    min-height: 6px;
-    background-color: #5c82b0;
-    background-image: none;
-    border: none;
-    border-radius: 3px;
-}
-button.flat { background: none; border: none; color: #949499; font-size: 12px; }
-"""
-
 ICONS = {
     "Photos": "image-x-generic-symbolic",
     "Documents": "x-office-document-symbolic",
     "Team share": "system-users-symbolic",
 }
-
-BADGE_CLASS = {"done": "done", "uploading": "upload"}
 
 
 class Window(Gtk.ApplicationWindow):
@@ -107,11 +52,6 @@ class Window(Gtk.ApplicationWindow):
         self.rows: dict[int, dict] = {}
         self.set_default_size(380, 0)
 
-        provider = Gtk.CssProvider()
-        provider.load_from_data(CSS)
-        Gtk.StyleContext.add_provider_for_display(
-            self.get_display(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_child(outer)
 
@@ -120,9 +60,7 @@ class Window(Gtk.ApplicationWindow):
         header.set_margin_top(14); header.set_margin_bottom(14)
         header.set_margin_start(20); header.set_margin_end(20)
         title = Gtk.Label(label="vero", halign=Gtk.Align.START, hexpand=True)
-        title.add_css_class("title")
         self.count = Gtk.Label(label="", halign=Gtk.Align.END)
-        self.count.add_css_class("count")
         header.append(title); header.append(self.count)
         outer.append(header)
         outer.append(self._separator())
@@ -139,11 +77,8 @@ class Window(Gtk.ApplicationWindow):
         footer.set_margin_top(10); footer.set_margin_bottom(10)
         footer.set_margin_start(20); footer.set_margin_end(20)
         self.dot = Gtk.Label(label="\u25cf")
-        self.dot.add_css_class("dot")
         self.state = Gtk.Label(label="starting", hexpand=True, halign=Gtk.Align.START)
-        self.state.add_css_class("state")
         quit_button = Gtk.Button(label="Quit")
-        quit_button.add_css_class("flat")
         quit_button.connect("clicked", lambda *_: app.quit())
         footer.append(self.dot); footer.append(self.state); footer.append(quit_button)
         outer.append(footer)
@@ -159,7 +94,6 @@ class Window(Gtk.ApplicationWindow):
 
     def _separator(self) -> Gtk.Widget:
         sep = Gtk.Box()
-        sep.add_css_class("sep")
         return sep
 
     def refresh_state(self) -> bool:
@@ -176,10 +110,6 @@ class Window(Gtk.ApplicationWindow):
             row["name"].set_text(job["name"])
             badge = row["badge"]
             badge.set_text(job["phase"])
-            for c in ("done", "upload"):
-                badge.remove_css_class(c)
-            if (c := BADGE_CLASS.get(job["phase"])):
-                badge.add_css_class(c)
             row["bar"].set_fraction(job["progress"] / 100)
             done = job["phase"] == "done"
             row["bar"].set_visible(not done)
@@ -204,15 +134,12 @@ class Window(Gtk.ApplicationWindow):
 
     def add_row(self, job: dict) -> None:
         card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-        card.add_css_class("card")
 
         # A button, not a picture. The platform draws it, and it behaves the
         # way a button on this platform behaves - hover, focus ring, keyboard.
         icon = Gtk.Image.new_from_icon_name(ICONS.get(job["name"], "folder-symbolic"))
         icon.set_pixel_size(28)
-        icon.add_css_class("icon")
         icon_button = Gtk.Button(child=icon, valign=Gtk.Align.CENTER)
-        icon_button.add_css_class("icon-button")
         icon_button.set_tooltip_text("Restart")
         icon_button.connect("clicked", lambda *_: self.restart(job["id"]))
         card.append(icon_button)
@@ -220,13 +147,10 @@ class Window(Gtk.ApplicationWindow):
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         name = Gtk.Label(halign=Gtk.Align.START)
-        name.add_css_class("job")
         badge = Gtk.Label(halign=Gtk.Align.START)
-        badge.add_css_class("badge")
         top.append(name); top.append(badge)
         bar = Gtk.ProgressBar(hexpand=True)
         sub = Gtk.Label(label="Up to date", halign=Gtk.Align.START)
-        sub.add_css_class("sub")
         sub.set_visible(False)
         body.append(top); body.append(bar); body.append(sub)
         card.append(body)

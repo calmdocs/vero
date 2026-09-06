@@ -32,22 +32,13 @@ event each time its state changes.
 
 ### How much of that is vero?
 
-None of it. The three recordings are styled — about fifty lines of it per
-platform — and it is worth seeing what is underneath, because the styling is the
-part that is *not* the point.
+None of it. Those are stock controls with no styling at all - what the platform
+gives you for free, which is why they look like three different applications
+rather than one design painted three times.
 
-<table>
-<tr>
-<td align="center" width="50%"><img src="docs/screenshots/linux-stock.gif" width="100%"><br><sub><b>stock GTK widgets</b> — the stylesheet removed, nothing else changed</sub></td>
-<td align="center" width="50%"><img src="docs/screenshots/linux.gif" width="100%"><br><sub><b>the same example</b> — with its 51 lines of CSS</sub></td>
-</tr>
-</table>
-
-Same widgets, same worker, same behaviour. The left is what you get for free;
-the right is what a designer does to it afterwards. Every example here is styled
-so the three platforms read as one application, which makes a better screenshot
-— but if you start from the example in this README you will get something
-closer to the left, and that is the honest starting point.
+[docs/styling.md](docs/styling.md) has the same three with a design on top, and
+the code that does it. It is worth a look if you want the polished version, and
+worth ignoring entirely if you do not.
 
 ```
    SwiftUI           WPF             GTK
@@ -167,12 +158,9 @@ final class Model: ObservableObject {
 Run it. Three jobs appear and their progress moves, pushed from Go as it
 changes - nothing polls. The button sends a request back.
 
-It will not look like the recordings above. Those are
-[example/menubar-app](example/menubar-app) and its Windows and Linux
-counterparts: the same worker, the same three jobs, with a few hundred lines of
-styling on top. This is the same thing with the styling left out, so that what
-you have to read is the part that talks to Go. Take the styling from there once
-it runs.
+That is close to what the recordings above show, because the examples use stock
+controls too. The macOS one, [example/menubar-app](example/menubar-app), is this
+in a menu bar rather than a window, with an empty state and an error line.
 
 ### The go side
 
@@ -224,6 +212,7 @@ You can build and run all three from the Mac:
 - [How it fits together](docs/design.md) - what runs where, and why pipes
 - [The protocol](docs/protocol.md) - the wire format, errors, the single-worker lock
 - [Building and running from a Mac](docs/building.md) - the long way round, by hand
+- [The styling](docs/styling.md) - the same examples with a design on them
 
 ## Tests
 

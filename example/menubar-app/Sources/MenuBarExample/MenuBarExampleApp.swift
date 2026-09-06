@@ -126,7 +126,7 @@ struct MenuView: View {
             // Published by vero, so nothing here polls. Worth showing:
             // "restarting" and stale progress look identical otherwise.
             Circle()
-                .fill(model.worker?.state == .running ? Palette.done : Palette.warn)
+                .fill(model.worker?.state == .running ? Color.green : Color.orange)
                 .frame(width: 7, height: 7)
             Text(model.worker?.state.rawValue ?? "starting")
                 .font(.caption)
@@ -135,7 +135,7 @@ struct MenuView: View {
             if let problem = model.problem {
                 Text("· \(problem)")
                     .font(.caption)
-                    .foregroundStyle(Palette.warn)
+                    .foregroundStyle(Color.orange)
                     .lineLimit(1)
             }
 
@@ -156,119 +156,33 @@ struct MenuView: View {
 struct JobCard: View {
     let job: Job
     let restart: () -> Void
-    @State private var hovered = false
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             // A button, not a picture. The platform draws it, and it behaves
             // the way a button on this platform behaves: hover, focus ring,
             // keyboard.
             Button(action: restart) {
                 Image(systemName: icon)
-                    .font(.system(size: 24))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 34)
             }
-            .buttonStyle(.borderless)
             .help("Restart")
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(job.name).font(.headline)
-                    PhaseBadge(phase: job.phase)
-                    Spacer()
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(job.name)
+                    Text(job.phase).foregroundStyle(.secondary)
                 }
-
-                if job.finished {
-                    Text("Up to date")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ProgressBar(fraction: Double(job.progress) / 100)
-                }
-            }
-
-            if job.finished {
-                Button(action: restart) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .help("Start again")
+                ProgressView(value: Double(job.progress) / 100)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(hovered ? 0.12 : 0.05),
-                        radius: hovered ? 5 : 2, y: 1)
-        )
-        .onHover { hovered = $0 }
     }
 
     private var icon: String {
         switch job.name {
-        case "Photos":     return "photo.on.rectangle"
-        case "Documents":  return "doc.text"
+        case "Photos": return "photo.on.rectangle"
+        case "Documents": return "doc.text"
         case "Team share": return "person.2"
-        default:           return "folder"
+        default: return "folder"
         }
     }
-}
-
-/// Drawn rather than using ProgressView.
-///
-/// A system progress bar renders in grey when its window is not the key one,
-/// ignoring any tint, which is right for a form and wrong for a status display
-/// that is meant to be glanced at from across the room.
-struct ProgressBar: View {
-    let fraction: Double
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.12))
-                Capsule().fill(Palette.active)
-                    .frame(width: max(3, geo.size.width * min(1, max(0, fraction))))
-            }
-        }
-        .frame(height: 6)
-    }
-}
-
-/// The phase, as a word rather than a number: "uploading" says more about what
-/// is happening than 62% does.
-///
-/// Colour carries meaning here rather than decorating. Ordinary progress is
-/// neutral - "looking for changes" is not a warning and should not look like
-/// one - and only finishing earns a colour. Reserving amber and red for things
-/// that are actually wrong is what makes them worth noticing.
-struct PhaseBadge: View {
-    let phase: String
-
-    var body: some View {
-        Text(phase)
-            .font(.caption2).fontWeight(.medium)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(colour.opacity(0.16)))
-            .foregroundStyle(colour)
-    }
-
-    private var colour: Color {
-        switch phase {
-        case "done":      return Palette.done
-        case "uploading": return Palette.active
-        default:          return Palette.neutral
-        }
-    }
-}
-
-/// Muted on purpose. Saturated blue against saturated amber, on every row, is
-/// loud enough to be tiring in something that sits in the menu bar all day.
-enum Palette {
-    static let neutral = Color(red: 0.58, green: 0.58, blue: 0.61)
-    static let active  = Color(red: 0.36, green: 0.51, blue: 0.69)
-    static let done    = Color(red: 0.36, green: 0.62, blue: 0.46)
-    static let warn    = Color(red: 0.76, green: 0.55, blue: 0.29)
 }
