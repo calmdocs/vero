@@ -16,7 +16,11 @@ let package = Package(
         // archive itself.  scripts/release.sh replaces this with a binaryTarget
         // pointing at the release's CVero.xcframework.zip, so a tagged version
         // carries the archive with it and nobody has to build one.
-        .target(name: "CVero"),
+        .binaryTarget(
+            name: "CVero",
+            url: "https://github.com/calmdocs/vero/releases/download/v0.1.0/CVero.xcframework.zip",
+            checksum: "093bde149bfc90bc2908990fcc63f136ddb9f635f15d346013729d919ec60680"
+        ),
         .target(name: "Vero", dependencies: ["CVero"]),
     ]
 )
