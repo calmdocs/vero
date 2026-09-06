@@ -1,10 +1,11 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-// libvero.a is built by ./build.sh before this package is compiled. The
-// unsafeFlags are how a SwiftPM package links a static archive that is not
-// itself a SwiftPM product; an Xcode project would add it under "Link Binary
-// With Libraries" instead.
+// A path dependency on the checkout, so this example exercises the working tree
+// rather than the last release - see the README.  That means it has to supply
+// the archive itself: build.sh builds libvero.a, and the unsafeFlags below link
+// it.  An application takes a tagged version instead, and the package brings the
+// archive with it.
 let package = Package(
     name: "MenuBarExample",
     platforms: [.macOS(.v13)],
