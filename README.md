@@ -3,14 +3,8 @@
 **Desktop applications whose logic is written once, in Go, and whose interface
 is the platform's own toolkit.**
 
-Every other way of building a desktop app in Go asks you to give something up.
-Fyne and Gio draw their own widgets, so the result looks identical everywhere
-and native nowhere. Wails and Lorca wrap a webview, which is Electron's
-tradeoff in a smaller binary. Walk is Windows only.
-
-vero takes the fourth path. The interface is genuinely SwiftUI, or WPF, or
-GTK — real controls, real menus, real notifications — and Go supplies
-everything behind it.
+Your Go code runs as a separate process. The interface is SwiftUI on macOS,
+WPF on Windows and GTK on Linux, and the two halves talk over pipes.
 
 <table>
 <tr>
@@ -20,25 +14,9 @@ everything behind it.
 </tr>
 </table>
 
-All three are the same Go worker. Only the drawing differs — and all three are
-recordings of the examples in this repository actually running: one on a Mac,
-one on Windows 11 in a VM, and one under Xvfb in a container.
-
-Everything you can see is a real control drawn by the platform. The icon on the
-left of each row is a button, not a picture of one: it hovers, takes focus and
-answers the keyboard the way a button on that platform does, because it *is*
-one. Nothing is polling either — the progress moving is the worker pushing an
-event each time its state changes.
-
-### How much of that is vero?
-
-None of it. Those are stock controls with no styling at all - what the platform
-gives you for free, which is why they look like three different applications
-rather than one design painted three times.
-
-[docs/styling.md](docs/styling.md) has the same three with a design on top, and
-the code that does it. It is worth a look if you want the polished version, and
-worth ignoring entirely if you do not.
+All three are recordings of the examples in this repository, running the same Go
+worker. Each uses that platform's stock controls, with no styling applied.
+[docs/styling.md](docs/styling.md) shows the same three with a design on top.
 
 ```
    SwiftUI           WPF             GTK
@@ -73,9 +51,10 @@ GOOS=darwin GOARCH=arm64 go build -o worker-arm64 && \
 lipo -create worker-amd64 worker-arm64 -output worker
 ```
 
-Drag `worker` into your Xcode project. That is the only binary you build: the C
-archive behind vero is the same for every application, so the package brings its
-own and links it for you.
+Drag `worker` into your Xcode project.
+
+That is the only binary you build. The C archive vero links is the same for
+every application, so the Swift package ships it.
 
 ### In the new Xcode project, replace ContentView.swift with the following code:
 
@@ -155,12 +134,8 @@ final class Model: ObservableObject {
 }
 ```
 
-Run it. Three jobs appear and their progress moves, pushed from Go as it
-changes - nothing polls. The button sends a request back.
-
-That is close to what the recordings above show, because the examples use stock
-controls too. The macOS one, [example/menubar-app](example/menubar-app), is this
-in a menu bar rather than a window, with an empty state and an error line.
+Run it. Three jobs appear, their progress moves, and the button sends a request
+back to the worker.
 
 ### The go side
 
@@ -179,9 +154,6 @@ go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
 
 w.Serve(r)
 ```
-
-Returning an error from a handler is not a crash: it arrives in Swift as
-`VeroError.refused`, with the worker still running.
 
 ## Windows and Linux
 
@@ -222,10 +194,9 @@ cd bindings/python && python3 -m unittest
 swift build
 ```
 
-The Go tests run the test binary as their own worker, so the worker really is
-a separate process: crashes, restarts, concurrent requests and the lifecycle
-are all exercised against a real one. The Python tests build the shared
-library and the example worker and drive the whole stack through ctypes.
+The Go tests run the test binary as their own worker, so it is a real separate
+process. The Python tests build the shared library and the example worker
+first.
 
 ## Licence
 

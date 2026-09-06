@@ -1,7 +1,6 @@
 # macOS example
 
-A SwiftUI menu bar app driving the Go worker in `../worker`: live progress, a
-restart button on each row, and an icon that changes between working and idle.
+A SwiftUI menu bar app driving the Go worker in `../worker`.
 
 ```bash
 ./build.sh
@@ -34,20 +33,13 @@ state.
 
 ## Why this links the archive itself
 
-The README's example adds vero as a versioned package, and the archive arrives
-with it - no `libvero.a`, no linker flags. This example does the opposite: a
-path dependency on `../..` and `-L. -lvero`, with `build.sh` building the
-archive first.
+An application adds vero as a versioned package, and the archive comes with it.
+This example uses a path dependency on `../..` instead, and links the archive
+itself with `-L. -lvero`, which is why `build.sh` builds `libvero.a` first.
 
-That is deliberate. A tagged release ships `CVero.xcframework` inside the
-package, but a working tree has no release, so an example that built against
-one would show you the last published vero rather than the checkout in front of
-you. `scripts/run.sh` runs this example, and the screenshots come from it, so it
-has to exercise the code as it is now - which is exactly how the changes in this
-repository get caught before they are tagged.
-
-So: an application follows the top-level README. This example does not, because
-it is not an application.
+A tagged release ships the archive inside the package; a working tree has no
+release. Using a path dependency means this example builds against the checkout
+rather than the last published version.
 
 ## Shipping one
 

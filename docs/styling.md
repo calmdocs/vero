@@ -1,12 +1,9 @@
 # The styling
 
-The examples in this repository use stock controls. That is deliberate: the
-point vero is making is that the interface is the platform's own, and stock
-widgets make that self-evident in a way a designed one cannot.
+The examples in this repository use stock controls, with no styling.
 
-They did not start that way. This page keeps what they looked like before, and
-the code that did it, because "how much of this is the library and how much is
-CSS" is a fair question to ask of any screenshot.
+They were styled before. This page keeps both versions and the code that made
+the difference.
 
 ## Before and after
 
@@ -204,9 +201,3 @@ enum Palette {
     static let warn    = Color(red: 0.76, green: 0.55, blue: 0.29)
 }
 ```
-
-## Which is better?
-
-The plain one, for a README. Nobody looking at it could think the appearance is
-something vero imposes, which is the whole claim. The styled row is the better
-screenshot, and the worse evidence.

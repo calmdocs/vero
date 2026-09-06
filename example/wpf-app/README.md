@@ -34,8 +34,6 @@ names.
 
 ## Build for the architecture you will run on
 
-This is worth saying plainly, because it is not obvious and it fails badly.
-
 A `windows/amd64` build of `vero.dll`, loaded into an x64 .NET process running
 under emulation on Windows-on-ARM, does not work: the first call into Go either
 never returns or takes the process down with `0xC0000409`, before anything is

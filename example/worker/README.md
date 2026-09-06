@@ -21,10 +21,8 @@ Two named handlers, which is what the interfaces call:
 and an event pushed whenever the state changes, so nothing polls.
 
 Run on its own it never returns. Run by an interface it answers requests until
-that interface quits, then stops with it — its standard input closes, and that
-is the signal, so it goes even if the interface crashed.
+that interface quits, then exits when its standard input closes.
 
-`r.Fallback` is still wired to the old handler that switches on a `"type"`
-field. Nothing here needs it any more; it is there because an interface that
-has not moved over to named handlers keeps working, and `r.FallbackCalls()`
-tells you when the last one has.
+`r.Fallback` is also wired to an older handler that switches on a `"type"` field
+in the request, so an interface that does not use named handlers still works.
+`r.FallbackCalls()` counts how many requests have taken that path.

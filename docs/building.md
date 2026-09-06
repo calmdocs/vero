@@ -5,14 +5,9 @@ Everything here is what `scripts/setup.sh`, `scripts/run.sh` and
 
 ## Building for all three platforms, from a Mac
 
-Everything below was run on one Apple Silicon Mac: the universal macOS archive,
-both Windows DLLs and both Linux shared libraries. No CI, no build farm, no
-second machine.
-
-It is this easy because of where the split falls. The **worker** is plain Go
-with no cgo, so it cross-compiles to every target with the toolchain you already
-have. Only the **shared library** needs a C compiler for the platform it will
-run on, because that half is built by cgo.
+The **worker** is plain Go with no cgo, so it cross-compiles to every target
+with the toolchain you already have. Only the **shared library** needs a C
+compiler for the platform it will run on, because that half is built by cgo.
 
 Five scripts do all of it:
 
@@ -80,9 +75,6 @@ CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64 -mmacosx-version-min=11.0" \
 lipo -create libvero-arm64.a libvero-amd64.a -output libvero.a
 lipo -info libvero.a          # x86_64 arm64
 ```
-
-One universal archive inside one universal app — you do not ship a binary per
-architecture and choose between them at runtime.
 
 Building it by hand like this, add `libvero.a` to your Xcode target under "Link
 Binary With Libraries" alongside the `Vero` package. `example/menubar-app` does
