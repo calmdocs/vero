@@ -92,6 +92,25 @@ n="vero-$VERSION-linux-arm64"
 stage "$n" libvero-arm64.so libvero.so worker-linux-arm64 worker
 archive "$n" tar.gz
 
+# The Swift package links this rather than asking every application to build
+# its own: the archive is identical for all of them.
+echo "==> the Swift binary target"
+XCF="$OUT/CVero.xcframework"
+HDR=$(mktemp -d)
+cp "$ROOT/Sources/CVero/include/CVero.h" "$HDR/"
+cat > "$HDR/module.modulemap" <<MOD
+module CVero {
+    header "CVero.h"
+    export *
+}
+MOD
+xcodebuild -create-xcframework -library "$DIST/libvero.a" -headers "$HDR" \
+    -output "$XCF" >/dev/null
+rm -rf "$HDR"
+( cd "$OUT" && zip -qr CVero.xcframework.zip CVero.xcframework && rm -rf CVero.xcframework )
+CHECKSUM=$(swift package --package-path "$ROOT" compute-checksum "$OUT/CVero.xcframework.zip")
+echo "  CVero.xcframework.zip  $CHECKSUM"
+
 ( cd "$OUT" && shasum -a 256 ./* > SHA256SUMS && echo "  SHA256SUMS" )
 
 echo
@@ -102,6 +121,30 @@ if [ "$PUBLISH" = yes ]; then
     echo
     echo "==> creating the GitHub release $VERSION"
     gh release create "$VERSION" "$OUT"/* --title "$VERSION" --generate-notes
+
+    # Now that the artefact has a URL, point the package at it and tag that.
+    # Package.swift and the binary it names have to come from one commit, or a
+    # consumer gets Swift from one version and Go from another.
+    echo "==> pointing Package.swift at $VERSION"
+    URL="https://github.com/calmdocs/vero/releases/download/$VERSION/CVero.xcframework.zip"
+    python3 - "$ROOT/Package.swift" "$URL" "$CHECKSUM" <<'PY'
+import re, sys
+path, url, checksum = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(path).read()
+s = re.sub(r'\.binaryTarget\(\s*name: "CVero".*?\)',
+           '.binaryTarget(\n            name: "CVero",\n            url: "%s",\n            checksum: "%s"\n        )' % (url, checksum),
+           s, flags=re.S)
+if '.binaryTarget' not in s:
+    s = s.replace('.target(name: "CVero"),',
+                  '.binaryTarget(\n            name: "CVero",\n            url: "%s",\n            checksum: "%s"\n        ),' % (url, checksum))
+open(path, "w").write(s)
+PY
+    git -C "$ROOT" add Package.swift
+    git -C "$ROOT" commit -m "Point the Swift package at $VERSION"
+    git -C "$ROOT" tag -f "$VERSION"
+    git -C "$ROOT" push origin main
+    git -C "$ROOT" push -f origin "$VERSION"
+    echo "  tagged $VERSION with a Package.swift that matches the artefact"
 else
     echo
     echo "not published. To do that:  ./scripts/release.sh $VERSION --publish"

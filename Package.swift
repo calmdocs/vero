@@ -8,9 +8,14 @@ let package = Package(
         .library(name: "Vero", targets: ["Vero"]),
     ],
     targets: [
-        // Declarations for the archive built from ./cshim. The archive itself
-        // is linked in by the application, not by this package - see the
-        // README for the two lines that do it.
+        // The C archive built from ./cshim, which is the same for every
+        // application: the worker's path arrives at runtime and every message
+        // is JSON.
+        //
+        // On main this is only the declarations, and the application links the
+        // archive itself.  scripts/release.sh replaces this with a binaryTarget
+        // pointing at the release's CVero.xcframework.zip, so a tagged version
+        // carries the archive with it and nobody has to build one.
         .target(name: "CVero"),
         .target(name: "Vero", dependencies: ["CVero"]),
     ]
