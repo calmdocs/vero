@@ -52,30 +52,20 @@ Create a new macOS SwiftUI Xcode project, then:
 
 - File -> Add Package Dependencies... -> `https://github.com/calmdocs/vero`
 
-### Build the worker and the archive
+### Build the worker
 
 ```bash
 git clone https://github.com/calmdocs/vero
-cd vero
+cd vero/example/worker
 
-# the worker: a plain go binary, universal
-cd example/worker
 GOOS=darwin GOARCH=amd64 go build -o worker-amd64 && \
 GOOS=darwin GOARCH=arm64 go build -o worker-arm64 && \
 lipo -create worker-amd64 worker-arm64 -output worker
-
-# the archive your app links: the same go code, built as a C archive
-cd ../..
-CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64" \
-    go build -buildmode=c-archive -o libvero-amd64.a ./cshim && \
-CGO_ENABLED=1 GOARCH=arm64 \
-    go build -buildmode=c-archive -o libvero-arm64.a ./cshim && \
-lipo -create libvero-amd64.a libvero-arm64.a -output libvero.a
 ```
 
-Drag `example/worker/worker` and `libvero.a` into your Xcode project. Dragging
-the archive in links it; the worker is a resource, and vero copies it out and
-runs it for you.
+Drag `worker` into your Xcode project. That is the only binary you build: the C
+archive behind vero is the same for every application, so the package brings its
+own and links it for you.
 
 ### In the new Xcode project, replace ContentView.swift with the following code:
 

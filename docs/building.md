@@ -61,6 +61,11 @@ lipo -create worker-darwin-arm64 worker-darwin-amd64 -output worker
 
 ### macOS: a universal C archive
 
+You only need this to work on vero itself, or to build from an unreleased
+commit. A tagged version ships the archive inside the Swift package as an
+XCFramework, so an application that depends on a version links it without
+building anything - see the README.
+
 Swift links the archive statically, so it has to carry both architectures or the
 app only runs on one of them.
 
@@ -79,8 +84,10 @@ lipo -info libvero.a          # x86_64 arm64
 One universal archive inside one universal app — you do not ship a binary per
 architecture and choose between them at runtime.
 
-Add `libvero.a` to your Xcode target under "Link Binary With Libraries" and add
-the `Vero` package. `example/menubar-app/build.sh` does the same for SwiftPM.
+Building it by hand like this, add `libvero.a` to your Xcode target under "Link
+Binary With Libraries" alongside the `Vero` package. `example/menubar-app` does
+the same for SwiftPM, with `-L. -lvero`, because it builds against the checkout
+rather than a release.
 
 ### Windows: one DLL per architecture
 

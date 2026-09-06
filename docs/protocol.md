@@ -117,7 +117,7 @@ Swift links the archive statically; Python and C# load a shared library at
 runtime instead:
 
 ```bash
-go build -buildmode=c-archive -o libvero.a   ./cshim   # Swift
+go build -buildmode=c-archive -o libvero.a   ./cshim   # Swift (shipped in the package)
 go build -buildmode=c-shared  -o libvero.so  ./cshim   # Python, Linux
 go build -buildmode=c-shared  -o vero.dll    ./cshim   # C#, Windows
 ```
