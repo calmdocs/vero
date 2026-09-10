@@ -1,6 +1,6 @@
 # vero
 
-**A Go backend with native macOS, Windows and Linux frontends.**
+**A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
 <table>
 <tr>
