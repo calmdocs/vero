@@ -193,27 +193,37 @@ struct ContentView: View {
 }
 ```
 
-### 3. Run the macOS SwiftUI app
+### 3. Run it
 
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
 ## Add the same worker to a Windows app
 
-The `main.go` from step 1 is unchanged. Build both pieces from your Mac.
+The `main.go` from step 1 is unchanged, and every step below runs on your
+Mac. Only step 4 needs Windows.
+
+Install these once:
+
+| | |
+|---|---|
+| The .NET SDK | `brew install --cask dotnet-sdk` |
+| A Windows ARM64 C compiler | unpack the `macos-universal` release of [llvm-mingw](https://github.com/mstorsjo/llvm-mingw/releases) into `~/toolchains/llvm-mingw` |
 
 ### 1. The go worker, and the library
 
 In the `worker` directory from step 1:
 
 ```bash
-CGO_ENABLED=1 GOOS=windows GOARCH=arm64 CC=aarch64-w64-mingw32-clang \
+CGO_ENABLED=1 GOOS=windows GOARCH=arm64 \
+    CC=$HOME/toolchains/llvm-mingw/bin/aarch64-w64-mingw32-clang \
     go build -buildmode=c-shared -o vero.dll github.com/calmdocs/vero/cshim
 CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
 ```
 
-Build for the architecture you will *run* on. On x64, swap `arm64` for
-`amd64` and use `CC=x86_64-w64-mingw32-gcc` from `brew install mingw-w64`.
+For an x64 Windows machine, swap `arm64` for `amd64` in every command in this
+section and use `CC=x86_64-w64-mingw32-gcc` from `brew install mingw-w64`.
+Build for the architecture Windows will *run* the DLL on.
 
 ### 2. The WPF app
 
@@ -335,16 +345,17 @@ public partial class MainWindow : Window
 }
 ```
 
-### 3. Run the WPF app
-
-Publish, then copy the two files from step 1 in beside the executable. Keep
-both names.
+### 3. Build it
 
 ```bash
 dotnet publish -c Release -r win-arm64 --self-contained \
     -p:EnableWindowsTargeting=true -o out
-cp vero.dll worker.exe out/
+cp ../worker/vero.dll ../worker/worker.exe out/
 ```
+
+Keep both names.
+
+### 4. Run it
 
 Copy `out/` to a Windows machine and run `VeroExample.exe`. Two jobs appear
 and their progress climbs. **Add job** puts a third in the list, and the arrow
@@ -356,22 +367,43 @@ with a design on it.
 
 ## Add the same worker to a Linux app
 
-The `main.go` from step 1 is unchanged. Build both pieces **on Linux**: on a
-Mac, `-buildmode=c-shared` produces a Mach-O dylib, not an ELF shared object.
+The `main.go` from step 1 is unchanged, and every step below runs on your Mac
+as well. The library is built in a container, because `-buildmode=c-shared` on
+a Mac emits a Mach-O dylib rather than an ELF shared object.
+
+Install Docker once:
+
+```bash
+brew install colima docker && colima start
+```
 
 ### 1. The go worker, and the library
 
-In the `worker` directory from step 1:
+In the `worker` directory from step 1. Keep it under your home directory:
+colima shares nothing else, and a bind mount from anywhere else produces no
+files and no error.
 
 ```bash
-CGO_ENABLED=1 go build -buildmode=c-shared -o libvero.so github.com/calmdocs/vero/cshim
-go build -o worker .
+docker run --rm -v "$PWD":/src -w /src \
+    -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e GOTOOLCHAIN=auto \
+    golang:1.24-bookworm \
+    sh -c 'CGO_ENABLED=1 go build -buildmode=c-shared -o libvero.so github.com/calmdocs/vero/cshim'
+
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o worker-linux .
 ```
 
 ### 2. The GTK4 app
 
-Copy [bindings/python/vero.py](bindings/python/vero.py) in beside them, and
-install `python3-gi` and `gir1.2-gtk-4.0`. Then add `main.py`:
+Make a directory beside `worker` and copy
+[bindings/python/vero.py](bindings/python/vero.py) into it, along with the two
+files from step 1:
+
+```bash
+cp ../worker/libvero.so .
+cp ../worker/worker-linux worker
+```
+
+Keep those names: `main.py` loads both from beside itself. Add it next:
 
 ```python
 #!/usr/bin/env python3
@@ -437,18 +469,41 @@ app.connect("activate", lambda a: Window(a).present())
 app.run(None)
 ```
 
-### 3. Run the GTK4 app
+### 3. Run it
+
+On a Linux machine, install `python3-gi` and `gir1.2-gtk-4.0`, then:
 
 ```bash
 chmod +x main.py && ./main.py
 ```
 
+Or run it from your Mac, on a virtual display in a container, and watch it in
+Screen Sharing:
+
+```bash
+docker build -t vero-gtk - <<'EOF'
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-gi gir1.2-gtk-4.0 libgtk-4-1 xvfb x11vnc xauth \
+    && rm -rf /var/lib/apt/lists/*
+EOF
+
+docker run --rm -p 5901:5900 -v "$PWD":/app -w /app vero-gtk sh -c '
+    Xvfb :99 -screen 0 480x440x24 &
+    sleep 2
+    export DISPLAY=:99
+    python3 main.py &
+    sleep 4
+    x11vnc -display :99 -forever -nopw -listen 0.0.0.0'
+
+open vnc://localhost:5901
+```
+
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-No Linux machine? From a Mac, `./scripts/run-linux.sh` builds both pieces in
-a container and opens the app in Screen Sharing.
-[example/gtk-app](example/gtk-app) is the same app with a design on it.
+[example/gtk-app](example/gtk-app) is the same app with a design on it, and
+`./scripts/run-linux.sh` runs it this way in one command.
 
 ## Run all three
 
