@@ -167,8 +167,6 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                // Nothing to do with the reply: the worker pushes the new
-                // state, and that is what redraws this list.
                 Button("Add job") { vero.call(AddJob()) }
                     .disabled(vero.isBusy)
                 Spacer()
