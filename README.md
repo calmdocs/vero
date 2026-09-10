@@ -1,8 +1,9 @@
 # vero
 
-**Write the logic once in Go, draw the interface with each platform's own
-toolkit — SwiftUI, WPF, GTK — and build all three from one Mac.** The two halves
-talk over pipes.
+**A Go backend with native macOS, Windows and Linux frontends.**
+
+SwiftUI, WPF and GTK, talking to the Go worker over pipes. Build all three from
+one Mac.
 
 <table>
 <tr>
