@@ -198,15 +198,16 @@ struct ContentView: View {
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-## The same worker, on Windows and Linux
+## Add the same worker to a Windows app
 
-Same `main.go`, unchanged. Each interface needs the worker built for that
-platform, plus the C shared library built from [cshim](cshim) - which macOS
-does not, because the Swift package ships the archive.
+The `main.go` from step 1 is unchanged. Windows needs it built for Windows,
+plus the C shared library that carries the protocol - which macOS did not,
+because the Swift package ships the archive.
 
-### Windows — WPF, C#
+### 1. The go worker, and the library
 
-Built from your Mac. WPF needs Windows to run, not to build.
+Run these in the `worker` directory you made in step 1. Building from your
+Mac: WPF needs Windows to run, not to build.
 
 ```bash
 CGO_ENABLED=1 GOOS=windows GOARCH=arm64 CC=aarch64-w64-mingw32-clang \
@@ -219,8 +220,11 @@ On x64, swap `arm64` for `amd64` and use `CC=x86_64-w64-mingw32-gcc` from
 on: an amd64 build under emulation on Windows-on-ARM either hangs on the first
 call into Go or exits `0xC0000409`.
 
-There is no NuGet package - copy [bindings/csharp/Vero.cs](bindings/csharp/Vero.cs)
-into the project beside these four files.
+### 2. The WPF app
+
+Make a directory for it, and copy
+[bindings/csharp/Vero.cs](bindings/csharp/Vero.cs) into it - there is no NuGet
+package. Then these four files beside it.
 
 `VeroExample.csproj`:
 
@@ -336,8 +340,11 @@ public partial class MainWindow : Window
 }
 ```
 
-Then publish, and keep both filenames - `vero.dll` is loaded by name and the
-worker is looked for beside the executable:
+### 3. Run it on Windows
+
+Publish, and put the two files from step 1 beside the executable. Keep both
+names: `vero.dll` is loaded by name, and the worker is looked for beside the
+executable.
 
 ```bash
 dotnet publish -c Release -r win-arm64 --self-contained \
@@ -345,20 +352,33 @@ dotnet publish -c Release -r win-arm64 --self-contained \
 cp vero.dll worker.exe out/
 ```
 
-[example/wpf-app](example/wpf-app) is the same thing with a design on it.
+Copy `out/` to a Windows machine and run `VeroExample.exe`. Two jobs appear
+and their progress climbs; **Add job** puts a third in the list, and the arrow
+beside a job sends it back to the beginning.
 
-### Linux — GTK4, Python
+No Windows machine? `./scripts/run-windows.sh` boots one in a VM on your Mac
+with this build on a disc. [example/wpf-app](example/wpf-app) is the same app
+with a design on it.
 
-Both pieces have to be built on Linux: `-buildmode=c-shared` on a Mac produces
-a Mach-O dylib, not an ELF shared object.
+## Add the same worker to a Linux app
+
+Again the same `main.go`, and again it needs the library alongside it.
+
+### 1. The go worker, and the library
+
+Both have to be built **on Linux**: `-buildmode=c-shared` on a Mac produces a
+Mach-O dylib, not an ELF shared object. `./scripts/run-linux.sh` does this in
+a container if you have no Linux machine.
 
 ```bash
 CGO_ENABLED=1 go build -buildmode=c-shared -o libvero.so github.com/calmdocs/vero/cshim
 go build -o worker .
 ```
 
+### 2. The GTK4 app
+
 Copy [bindings/python/vero.py](bindings/python/vero.py) in beside them - there
-is no PyPI package - and needs `python3-gi` and `gir1.2-gtk-4.0` installed.
+is no PyPI package - and install `python3-gi` and `gir1.2-gtk-4.0`.
 
 `main.py`:
 
@@ -426,10 +446,18 @@ app.connect("activate", lambda a: Window(a).present())
 app.run(None)
 ```
 
-Run it with `./main.py`. From a Mac, `./scripts/run-linux.sh` builds both
-pieces in a container and opens the app in Screen Sharing.
+### 3. Run it on Linux
 
-[example/gtk-app](example/gtk-app) is the same thing with a design on it.
+```bash
+chmod +x main.py && ./main.py
+```
+
+Two jobs appear and their progress climbs; **Add job** puts a third in the
+list, and the arrow beside a job sends it back to the beginning.
+
+From a Mac, `./scripts/run-linux.sh` builds both pieces in a container and
+opens the app in Screen Sharing. [example/gtk-app](example/gtk-app) is the
+same app with a design on it.
 
 ## Run all three
 
