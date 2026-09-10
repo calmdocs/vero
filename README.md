@@ -210,6 +210,13 @@ Install these once:
 | The .NET SDK | `brew install --cask dotnet-sdk` |
 | A Windows ARM64 C compiler | unpack the `macos-universal` release of [llvm-mingw](https://github.com/mstorsjo/llvm-mingw/releases) into `~/toolchains/llvm-mingw` |
 
+Match the Windows machine you will run on, not the Mac you are building on.
+Every step below targets ARM. For an x64 machine, three things change:
+
+- the compiler is `x86_64-w64-mingw32-gcc`, from `brew install mingw-w64`
+- both commands in step 1 take `GOARCH=amd64`
+- step 3 publishes `-r win-x64`
+
 ### 1. The go worker, and the library
 
 In the `worker` directory from step 1:
@@ -220,10 +227,6 @@ CGO_ENABLED=1 GOOS=windows GOARCH=arm64 \
     go build -buildmode=c-shared -o vero.dll github.com/calmdocs/vero/cshim
 CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
 ```
-
-For an x64 Windows machine, swap `arm64` for `amd64` in every command in this
-section and use `CC=x86_64-w64-mingw32-gcc` from `brew install mingw-w64`.
-Build for the architecture Windows will *run* the DLL on.
 
 ### 2. The WPF app
 
@@ -353,7 +356,8 @@ dotnet publish -c Release -r win-arm64 --self-contained \
 cp ../worker/vero.dll ../worker/worker.exe out/
 ```
 
-Keep both names.
+Keep both names: `Vero.cs` imports `vero.dll` by name, and `MainWindow.xaml.cs`
+looks for `worker.exe` beside the executable.
 
 ### 4. Run it
 
@@ -379,9 +383,9 @@ brew install colima docker && colima start
 
 ### 1. The go worker, and the library
 
-In the `worker` directory from step 1. Keep it under your home directory:
-colima shares nothing else, and a bind mount from anywhere else produces no
-files and no error.
+Run these in the `worker` directory from step 1, which has to sit somewhere
+under your home directory: colima shares only `$HOME` with the container, so a
+build mounted from anywhere else finishes without error and leaves no files.
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src \
@@ -403,7 +407,9 @@ cp ../worker/libvero.so .
 cp ../worker/worker-linux worker
 ```
 
-Keep those names: `main.py` loads both from beside itself. Add it next:
+Those are the names `main.py` uses: it loads `libvero.so` and runs `worker`
+from its own directory, which is why the second copy drops the `-linux`. Add
+`main.py` next:
 
 ```python
 #!/usr/bin/env python3
