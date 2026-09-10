@@ -124,7 +124,7 @@ lipo -create worker-amd64 worker-arm64 -output worker
 That is the only binary you build. The C archive vero links ships with the
 Swift package.
 
-### 2. The app
+### 2. The macOS SwiftUI app
 
 Create a new macOS SwiftUI project, then File -> Add Package Dependencies... ->
 `https://github.com/calmdocs/vero`, and drag `worker` into the project.
