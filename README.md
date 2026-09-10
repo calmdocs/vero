@@ -22,32 +22,123 @@ git clone https://github.com/calmdocs/vero && cd vero
 
 ## Add vero to your own macOS app
 
-With Xcode and Go installed, this is a working app in four steps.
+Both halves, from nothing. With Xcode and Go installed it takes a few minutes.
 
-**1.** Create a new macOS SwiftUI project, then File -> Add Package
-Dependencies... -> `https://github.com/calmdocs/vero`
-
-**2.** Build the worker, and drag it into the project. This is the only binary
-you build — the C archive vero links ships with the Swift package.
+### 1. The worker
 
 ```bash
-git clone https://github.com/calmdocs/vero && cd vero/example/worker
+mkdir worker && cd worker
+go mod init worker
+go get github.com/calmdocs/vero
+```
+
+`main.go`:
+
+```go
+package main
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/calmdocs/vero"
+)
+
+// What the interface draws.  One event type, widened when it needs more -
+// see "Two things worth knowing" below.
+type Job struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Progress int    `json:"progress"`
+}
+
+type Status struct {
+	Jobs []Job `json:"jobs"`
+}
+
+// What the interface asks for.  The name it is registered under is what
+// routes it, and Swift names the same string.
+type RestartJob struct {
+	ID int `json:"id"`
+}
+
+var (
+	mu   sync.Mutex
+	jobs = []Job{{ID: 1, Name: "Photos"}, {ID: 2, Name: "Documents"}}
+)
+
+func snapshot() Status {
+	mu.Lock()
+	defer mu.Unlock()
+	return Status{Jobs: append([]Job(nil), jobs...)}
+}
+
+func main() {
+	ctx := context.Background()
+	w := vero.NewWorker(vero.WorkerOptions{})
+
+	// The actual work.  Yours goes here.
+	go func() {
+		for range time.Tick(200 * time.Millisecond) {
+			mu.Lock()
+			for i := range jobs {
+				if jobs[i].Progress < 100 {
+					jobs[i].Progress++
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+
+	// Push the state when it changes.  Not on a timer: an interface sent the
+	// same thing ten times a second is polling with extra steps.
+	go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
+
+	r := vero.NewRouter()
+	vero.Handle(r, "restartJob", func(_ context.Context, req RestartJob) (Status, error) {
+		mu.Lock()
+		for i := range jobs {
+			if jobs[i].ID == req.ID {
+				jobs[i].Progress = 0
+			}
+		}
+		mu.Unlock()
+		return snapshot(), nil
+	})
+
+	// Blocks until the interface goes away, then returns so this process can
+	// leave with it.
+	w.Serve(r)
+}
+```
+
+Build it as one universal binary:
+
+```bash
 GOOS=darwin GOARCH=amd64 go build -o worker-amd64 && \
 GOOS=darwin GOARCH=arm64 go build -o worker-arm64 && \
 lipo -create worker-amd64 worker-arm64 -output worker
 ```
 
-**3.** Replace `ContentView.swift` with this:
+That is the only binary you build. The C archive vero links ships with the
+Swift package.
+
+### 2. The app
+
+Create a new macOS SwiftUI project, then File -> Add Package Dependencies... ->
+`https://github.com/calmdocs/vero`, and drag `worker` into the project.
+
+Replace `ContentView.swift` with this:
 
 ```swift
 import SwiftUI
 import Vero
 
-// What the worker sends us. The keys match the json tags on the go structs.
+// The same two types, and the same request name, as the worker.
 struct Job: Decodable, Identifiable {
     let id: Int
     let name: String
-    let phase: String
     let progress: Int
 }
 
@@ -55,8 +146,6 @@ struct Status: Decodable {
     let jobs: [Job]
 }
 
-// What we send back. `name` is the handler it is routed to - it matches
-// vero.Handle in the worker - and Reply is what comes back.
 struct RestartJob: NamedRequest {
     static let name = "restartJob"
     typealias Reply = Status
@@ -64,87 +153,44 @@ struct RestartJob: NamedRequest {
 }
 
 struct ContentView: View {
-    @StateObject private var model = Model()
+    // Copies the worker out of the app bundle, launches it, restarts it if it
+    // dies, stops it when the app exits, and republishes this view whenever
+    // the worker pushes a new Status.
+    @StateObject private var vero = VeroModel<Status>(
+        bundledWorker: "worker", directoryName: "Example/bin")
 
     var body: some View {
         VStack(spacing: 0) {
-            if let problem = model.problem {
+            if let problem = vero.problem {
                 Text(problem).foregroundStyle(.orange).padding(8)
             }
-            List(model.jobs) { job in
+            List(vero.state?.jobs ?? []) { job in
                 HStack {
-                    Button { model.restart(job) } label: {
+                    Button { vero.call(RestartJob(id: job.id)) } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .disabled(model.worker?.isBusy ?? true)
+                    .disabled(vero.isBusy)
 
                     Text(job.name)
-                    Text(job.phase).foregroundStyle(.secondary)
                     ProgressView(value: Double(job.progress) / 100)
                 }
             }
         }
-        .frame(minWidth: 380, minHeight: 220)
-        .onAppear { model.start() }
-    }
-}
-
-@MainActor
-final class Model: ObservableObject {
-    @Published var jobs: [Job] = []
-    @Published var problem: String?
-
-    // Published so the view can read worker.isBusy and worker.state directly.
-    @Published private(set) var worker: VeroClient?
-
-    func start() {
-        guard worker == nil else { return }
-        do {
-            // Copies the worker out of the app bundle, launches it, restarts
-            // it if it dies, and stops it when this app exits.
-            let worker = try VeroClient(
-                bundledWorker: "worker", directoryName: "Example/bin")
-
-            // Pushed the instant the go side changes, already on the main
-            // actor, so it can go straight into published state.
-            worker.onEvent(Status.self) { [weak self] status in
-                self?.jobs = status.jobs
-            }
-            if let status = worker.latest(Status.self) { jobs = status.jobs }
-
-            self.worker = worker
-        } catch {
-            problem = "Could not start the worker: \(error.localizedDescription)"
-        }
-    }
-
-    func restart(_ job: Job) {
-        // No await: this overload is for buttons.
-        worker?.call(RestartJob(id: job.id))
+        .frame(minWidth: 320, minHeight: 200)
     }
 }
 ```
 
-**4.** Run it. Three jobs appear, their progress moves, and the button sends a
-request to the worker.
+### 3. Run it
 
-### The go side
+Two jobs appear, their progress climbs, and the button sends a request that
+sets one back to zero.
 
-That worker is [example/worker/main.go](example/worker/main.go), and this is
-all of its interface to Swift:
-
-```go
-r := vero.NewRouter()
-
-vero.Handle(r, "restartJob", func(_ context.Context, req RestartJob) (Status, error) {
-    return restart(req.ID)
-})
-
-// Push an event when the state changes, not on a timer.
-go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
-
-w.Serve(r)
-```
+That is the whole interface to vero: `VeroModel` holds the worker and the last
+state it pushed, `vero.state` is that state, and `vero.call` asks for
+something. There is no supervisor to write, no polling, no in-flight counting
+and no copying the worker out of the bundle - and `vero.worker` is there for
+anything this does not cover.
 
 ## Two things worth knowing
 
