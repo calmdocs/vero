@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import Vero
 
@@ -7,9 +8,9 @@ struct MenuBarExampleApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(model: delegate.model)
+            MenuView(vero: delegate.vero)
         } label: {
-            Image(systemName: delegate.model.working
+            Image(systemName: delegate.vero.state?.working == true
                   ? "arrow.triangle.2.circlepath"
                   : "checkmark.circle")
         }
@@ -18,13 +19,32 @@ struct MenuBarExampleApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = Model()
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    /// The worker, the last state it pushed, and everything a view needs to
+    /// draw both.  Created here rather than when a view appears: a menu bar
+    /// app may go a long time before anyone opens its panel, and the worker
+    /// should be running before then.
+    let vero = VeroModel<Status>(
+        bundledWorker: workerName, directoryName: "VeroMenuBarExample/bin")
 
     private var recordingWindow: NSWindow?
+    private var forwarding: AnyCancellable?
+
+    /// ObservableObject, and forwarding, both for the menu bar label.
+    ///
+    /// @NSApplicationDelegateAdaptor only watches a delegate that is an
+    /// ObservableObject, and an ObservableObject is not republished by one it
+    /// holds - so without these two the icon reads `working` once, at launch,
+    /// and never changes again.  The panel is fine either way, because it
+    /// observes the model directly.
+    override init() {
+        super.init()
+        forwarding = vero.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        model.start()
 
         // The same view in an ordinary window, for recording the screenshots
         // in the README. A MenuBarExtra panel closes the moment focus moves,
@@ -45,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Size to the view. A fixed height leaves empty space below the
             // last card, which a MenuBarExtra panel never shows because it
             // sizes itself to its content.
-            let hosting = NSHostingView(rootView: MenuView(model: model))
+            let hosting = NSHostingView(rootView: MenuView(vero: vero))
             hosting.sizingOptions = [.preferredContentSize]
             window.contentView = hosting
             window.setFrameOrigin(NSPoint(x: 100, y: 400))
@@ -61,29 +81,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Not required - the worker's stdin closes when we exit and it stops
         // with us, even if we crash - but it ends the work a moment sooner.
-        model.stop()
+        vero.stop()
     }
 }
 
 // MARK: - The menu
 
 struct MenuView: View {
-    @ObservedObject var model: Model
+    @ObservedObject var vero: VeroModel<Status>
+
+    private var jobs: [Job] { vero.state?.jobs ?? [] }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
 
-            if model.jobs.isEmpty {
+            if jobs.isEmpty {
                 emptyState
             } else {
                 // Not a ScrollView: inside a MenuBarExtra it has no height to
                 // fill and collapses to nothing, taking the list with it. A
                 // handful of rows sizes itself.
                 VStack(spacing: 10) {
-                    ForEach(model.jobs) { job in
-                        JobCard(job: job) { model.restart(job) }
+                    ForEach(jobs) { job in
+                        // No reply to handle: the worker pushes the new state,
+                        // which is what redraws this.
+                        JobCard(job: job) { vero.call(RestartJob(id: job.id)) }
                     }
                 }
                 .padding(16)
@@ -100,7 +124,7 @@ struct MenuView: View {
             Text("vero")
                 .font(.title2).fontWeight(.bold)
             Spacer()
-            Text("\(model.jobs.count) \(model.jobs.count == 1 ? "job" : "jobs")")
+            Text("\(jobs.count) \(jobs.count == 1 ? "job" : "jobs")")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -126,13 +150,13 @@ struct MenuView: View {
             // Published by vero, so nothing here polls. Worth showing:
             // "restarting" and stale progress look identical otherwise.
             Circle()
-                .fill(model.worker?.state == .running ? Color.green : Color.orange)
+                .fill(vero.workerState == .running ? Color.green : Color.orange)
                 .frame(width: 7, height: 7)
-            Text(model.worker?.state.rawValue ?? "starting")
+            Text(vero.workerState.rawValue)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if let problem = model.problem {
+            if let problem = vero.problem {
                 Text("· \(problem)")
                     .font(.caption)
                     .foregroundStyle(Color.orange)
