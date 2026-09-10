@@ -198,35 +198,50 @@ struct ContentView: View {
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-## The same worker, with Windows and Linux interfaces
+## The same worker, on Windows and Linux
 
-Windows and Linux do not get a port of the worker. They get the same `main.go`,
-built for that platform, behind an interface drawn with that platform's own
-toolkit - and the three examples in this repository are exactly that: one
-worker, three interfaces.
+Same `main.go`. Each interface needs the worker built for that platform, plus
+the C shared library built from [cshim](cshim) - which macOS does not, because
+the Swift package ships the archive.
 
-Each interface needs two things from here: **the worker**, built for that
-platform, and **the C shared library** that carries the protocol, built from
-[cshim](cshim). macOS is the exception that needs no library of its own,
-because the Swift package ships the archive.
+### Windows — WPF, C#
 
-| | the library | the interface |
-|---|---|---|
-| Windows | `vero.dll` | WPF, C# — [example/wpf-app](example/wpf-app) |
-| Linux | `libvero.so` | GTK4, Python — [example/gtk-app](example/gtk-app) |
+Built from your Mac. WPF needs Windows to run, not to build.
 
-Both can be built from your Mac. WPF needs Windows to run but not to build, so
-the .NET SDK on macOS produces the application; `libvero.so` has to be built on
-Linux, because `-buildmode=c-shared` on a Mac produces a Mach-O dylib rather
-than an ELF shared object, and `scripts/run-linux.sh` does that in a container.
-Each example's README has the exact commands, and
-[docs/building.md](docs/building.md) has all of them in one place.
+```bash
+CGO_ENABLED=1 GOOS=windows GOARCH=arm64 CC=aarch64-w64-mingw32-clang \
+    go build -buildmode=c-shared -o vero.dll github.com/calmdocs/vero/cshim
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
 
-The interface code is small in both. The bindings expose the same three things
-the Swift one does - the state the worker pushed, an event when it changes, and
-a call - so [bindings/csharp](bindings/csharp) and
-[bindings/python](bindings/python) are the whole of what a new interface has to
-learn.
+dotnet publish -c Release -r win-arm64 --self-contained \
+    -p:EnableWindowsTargeting=true -o out
+cp vero.dll worker.exe out/
+```
+
+On x64, swap `arm64` for `amd64`, `win-arm64` for `win-x64`, and use
+`CC=x86_64-w64-mingw32-gcc` from `brew install mingw-w64`. Build `vero.dll` for
+the architecture you will run on: an amd64 build under emulation on
+Windows-on-ARM either hangs on the first call into Go or exits `0xC0000409`.
+
+Keep both filenames. `vero.dll` is loaded by name, and the worker is looked for
+beside the executable.
+
+[example/wpf-app](example/wpf-app) · [bindings/csharp](bindings/csharp)
+
+### Linux — GTK4, Python
+
+Both pieces have to be built on Linux: `-buildmode=c-shared` on a Mac produces
+a Mach-O dylib, not an ELF shared object.
+
+```bash
+CGO_ENABLED=1 go build -buildmode=c-shared -o libvero.so github.com/calmdocs/vero/cshim
+go build -o worker .
+```
+
+Needs `python3-gi` and `gir1.2-gtk-4.0`. From a Mac, `./scripts/run-linux.sh`
+builds both in a container and opens the app in Screen Sharing.
+
+[example/gtk-app](example/gtk-app) · [bindings/python](bindings/python)
 
 ## Run all three
 
