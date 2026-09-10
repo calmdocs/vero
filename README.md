@@ -146,6 +146,22 @@ go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
 w.Serve(r)
 ```
 
+## Two things worth knowing
+
+**Emit one type.** The event envelope carries no name, so `events(T.self)`
+decodes every payload as `T` and quietly skips what does not fit - telling
+types apart by structural accident rather than by name. `latest` is a single
+slot holding the most recent event whatever its type, so with two types a
+window opening draws blank whenever the other one arrived last. Widen the type
+you have rather than adding a second, which is what `EmitOnChange` and its
+single snapshot already push you towards.
+
+**A debug build always takes the worker from the bundle.** Rebuild a worker
+without bumping its version and the copy on disk would otherwise stay - it is
+the same version, so replacing it would be wrong - and the change under test
+would never run, with nothing to say why. So in a debug build there is nothing
+to remember: build the worker, run, and it is the one you just built.
+
 ## Next
 
 | | |
