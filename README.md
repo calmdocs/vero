@@ -12,7 +12,7 @@
 
 ## Add vero to your own macOS app
 
-### 1. The worker
+### 1. The go worker
 
 ```bash
 mkdir worker && cd worker
