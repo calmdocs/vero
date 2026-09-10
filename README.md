@@ -193,7 +193,7 @@ struct ContentView: View {
 }
 ```
 
-### 3. Run it
+### 3. Run the macOS SwiftUI app
 
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
