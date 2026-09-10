@@ -200,9 +200,9 @@ list, and the arrow beside a job sends it back to the beginning.
 
 ## The same worker, on Windows and Linux
 
-Same `main.go`. Each interface needs the worker built for that platform, plus
-the C shared library built from [cshim](cshim) - which macOS does not, because
-the Swift package ships the archive.
+Same `main.go`, unchanged. Each interface needs the worker built for that
+platform, plus the C shared library built from [cshim](cshim) - which macOS
+does not, because the Swift package ships the archive.
 
 ### Windows — WPF, C#
 
@@ -212,21 +212,140 @@ Built from your Mac. WPF needs Windows to run, not to build.
 CGO_ENABLED=1 GOOS=windows GOARCH=arm64 CC=aarch64-w64-mingw32-clang \
     go build -buildmode=c-shared -o vero.dll github.com/calmdocs/vero/cshim
 CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
+```
 
+On x64, swap `arm64` for `amd64` and use `CC=x86_64-w64-mingw32-gcc` from
+`brew install mingw-w64`. Build `vero.dll` for the architecture you will *run*
+on: an amd64 build under emulation on Windows-on-ARM either hangs on the first
+call into Go or exits `0xC0000409`.
+
+There is no NuGet package - copy [bindings/csharp/Vero.cs](bindings/csharp/Vero.cs)
+into the project beside these four files.
+
+`VeroExample.csproj`:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <RootNamespace>VeroExample</RootNamespace>
+  </PropertyGroup>
+</Project>
+```
+
+`App.xaml`:
+
+```xml
+<Application x:Class="VeroExample.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml"/>
+```
+
+`MainWindow.xaml`:
+
+```xml
+<Window x:Class="VeroExample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="vero" Width="360" Height="260">
+    <DockPanel Margin="8">
+        <Button x:Name="AddJob" Content="Add job" Click="AddJob_Click"
+                DockPanel.Dock="Top" HorizontalAlignment="Left" Padding="8,2"/>
+        <ItemsControl x:Name="Jobs" Margin="0,8,0,0">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <DockPanel Margin="0,4">
+                        <Button Content="&#x21bb;" Tag="{Binding Id}" Click="Restart_Click"/>
+                        <TextBlock Text="{Binding Name}" Width="90" Margin="8,0"/>
+                        <ProgressBar Value="{Binding Progress}" Maximum="100" Height="12"/>
+                    </DockPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </DockPanel>
+</Window>
+```
+
+`MainWindow.xaml.cs`:
+
+```csharp
+using System;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Windows;
+using System.Windows.Controls;
+using Vero;
+
+namespace VeroExample;
+
+// The same types, and the same request names, as the worker.
+public record Job(
+    [property: JsonPropertyName("id")]       int Id,
+    [property: JsonPropertyName("name")]     string Name,
+    [property: JsonPropertyName("progress")] int Progress);
+
+public record Status(
+    [property: JsonPropertyName("jobs")] Job[] Jobs);
+
+public partial class MainWindow : Window
+{
+    private readonly VeroClient _vero;
+    private readonly ObservableCollection<Job> _jobs = new();
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        Jobs.ItemsSource = _jobs;
+
+        // Launches the worker beside the executable, restarts it if it dies,
+        // and stops it when this process exits.
+        _vero = new VeroClient(Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "worker.exe"));
+
+        _ = ReadEvents();
+    }
+
+    // Pushed the instant the worker's state moves, on its own thread.
+    private async System.Threading.Tasks.Task ReadEvents()
+    {
+        await foreach (var element in _vero.Events())
+        {
+            var status = element.Deserialize<Status>();
+            if (status is not null)
+                Dispatcher.Invoke(() => Apply(status));
+        }
+    }
+
+    private void Apply(Status status)
+    {
+        _jobs.Clear();
+        foreach (var job in status.Jobs) _jobs.Add(job);
+    }
+
+    private async void AddJob_Click(object sender, RoutedEventArgs e) =>
+        await _vero.CallAsync("addJob", new { });
+
+    private async void Restart_Click(object sender, RoutedEventArgs e) =>
+        await _vero.CallAsync("restartJob", new { id = (int)((Button)sender).Tag });
+}
+```
+
+Then publish, and keep both filenames - `vero.dll` is loaded by name and the
+worker is looked for beside the executable:
+
+```bash
 dotnet publish -c Release -r win-arm64 --self-contained \
     -p:EnableWindowsTargeting=true -o out
 cp vero.dll worker.exe out/
 ```
 
-On x64, swap `arm64` for `amd64`, `win-arm64` for `win-x64`, and use
-`CC=x86_64-w64-mingw32-gcc` from `brew install mingw-w64`. Build `vero.dll` for
-the architecture you will run on: an amd64 build under emulation on
-Windows-on-ARM either hangs on the first call into Go or exits `0xC0000409`.
-
-Keep both filenames. `vero.dll` is loaded by name, and the worker is looked for
-beside the executable.
-
-[example/wpf-app](example/wpf-app) · [bindings/csharp](bindings/csharp)
+[example/wpf-app](example/wpf-app) is the same thing with a design on it.
 
 ### Linux — GTK4, Python
 
@@ -238,10 +357,79 @@ CGO_ENABLED=1 go build -buildmode=c-shared -o libvero.so github.com/calmdocs/ver
 go build -o worker .
 ```
 
-Needs `python3-gi` and `gir1.2-gtk-4.0`. From a Mac, `./scripts/run-linux.sh`
-builds both in a container and opens the app in Screen Sharing.
+Copy [bindings/python/vero.py](bindings/python/vero.py) in beside them - there
+is no PyPI package - and needs `python3-gi` and `gir1.2-gtk-4.0` installed.
 
-[example/gtk-app](example/gtk-app) · [bindings/python](bindings/python)
+`main.py`:
+
+```python
+#!/usr/bin/env python3
+import os
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import GLib, Gtk
+
+from vero import Vero, run_in_thread
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+class Window(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="vero", default_width=360)
+        self.bars = {}
+
+        # Launches the worker beside this file, restarts it if it dies, and
+        # stops it when this process exits.
+        self.vero = Vero(os.path.join(HERE, "libvero.so"),
+                         os.path.join(HERE, "worker"))
+
+        add = Gtk.Button(label="Add job")
+        add.connect("clicked", lambda _: self.vero.call("addJob", {}))
+
+        self.rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                      margin_top=8, margin_bottom=8, margin_start=8, margin_end=8)
+        box.append(add)
+        box.append(self.rows)
+        self.set_child(box)
+
+        # latest draws a window that has just opened; events keep it current.
+        if status := self.vero.latest():
+            self.apply(status)
+        run_in_thread(self.vero, lambda s: GLib.idle_add(self.apply, s))
+
+    def apply(self, status):
+        for job in status["jobs"]:
+            if job["id"] not in self.bars:
+                self.bars[job["id"]] = self.add_row(job)
+            self.bars[job["id"]].set_fraction(job["progress"] / 100)
+        return False  # GLib.idle_add: run once
+
+    def add_row(self, job):
+        bar = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
+        restart = Gtk.Button(icon_name="view-refresh-symbolic")
+        restart.connect(
+            "clicked", lambda _, i=job["id"]: self.vero.call("restartJob", {"id": i}))
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.append(restart)
+        row.append(Gtk.Label(label=job["name"], width_chars=10, xalign=0))
+        row.append(bar)
+        self.rows.append(row)
+        return bar
+
+
+app = Gtk.Application(application_id="com.example.vero")
+app.connect("activate", lambda a: Window(a).present())
+app.run(None)
+```
+
+Run it with `./main.py`. From a Mac, `./scripts/run-linux.sh` builds both
+pieces in a container and opens the app in Screen Sharing.
+
+[example/gtk-app](example/gtk-app) is the same thing with a design on it.
 
 ## Run all three
 
