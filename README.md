@@ -20,7 +20,7 @@ git clone https://github.com/calmdocs/vero && cd vero
 
 `--iso` is a Windows 11 Arm64 ISO, needed only the first time.
 
-## Add vero to your own app
+## Add vero to your own macOS app
 
 **1.** In Xcode: File -> Add Package Dependencies... ->
 `https://github.com/calmdocs/vero`
