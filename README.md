@@ -12,8 +12,6 @@
 
 ## Add vero to your own macOS app
 
-Both halves, from nothing. With Xcode and Go installed it takes a few minutes.
-
 ### 1. The worker
 
 ```bash
