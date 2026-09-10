@@ -228,7 +228,7 @@ CGO_ENABLED=1 GOOS=windows GOARCH=arm64 \
 CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
 ```
 
-### 2. The WPF app
+### 2. The Windows WPF app
 
 Make a directory beside `worker` and copy
 [bindings/csharp/Vero.cs](bindings/csharp/Vero.cs) into it. Add these four
@@ -396,7 +396,7 @@ docker run --rm -v "$PWD":/src -w /src \
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o worker-linux .
 ```
 
-### 2. The GTK4 app
+### 2. The Linux GTK4 app
 
 Make a directory beside `worker` and copy
 [bindings/python/vero.py](bindings/python/vero.py) into it, along with the two
