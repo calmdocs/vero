@@ -196,9 +196,7 @@ struct ContentView: View {
 ### 3. Run it
 
 Two jobs appear and their progress climbs. **Add job** puts a third in the
-list, and the arrow beside a job sends it back to the beginning. Neither
-button does anything to the list itself: they ask the worker, the worker
-changes its state, and the view redraws because that state was pushed.
+list, and the arrow beside a job sends it back to the beginning.
 
 ## The same worker, with Windows and Linux interfaces
 
