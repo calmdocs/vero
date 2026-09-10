@@ -10,16 +10,6 @@
 </tr>
 </table>
 
-## Run the examples
-
-```bash
-git clone https://github.com/calmdocs/vero && cd vero
-./scripts/setup.sh                              # installs toolchains, builds everything
-./scripts/run.sh --iso ~/Downloads/win11.iso    # opens all three
-```
-
-`--iso` is a Windows 11 Arm64 ISO, needed only the first time.
-
 ## Add vero to your own macOS app
 
 Both halves, from nothing. With Xcode and Go installed it takes a few minutes.
@@ -39,14 +29,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/calmdocs/vero"
 )
 
-// What the interface draws.  One event type, widened when it needs more -
-// see "Two things worth knowing" below.
+// What the interface draws.
 type Job struct {
 	ID       int    `json:"id"`
 	Name     string `json:"name"`
@@ -57,7 +47,7 @@ type Status struct {
 	Jobs []Job `json:"jobs"`
 }
 
-// What the interface asks for.  The name it is registered under is what
+// What the interface asks for.  The name each is registered under is what
 // routes it, and Swift names the same string.
 type RestartJob struct {
 	ID int `json:"id"`
@@ -96,6 +86,18 @@ func main() {
 	go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
 
 	r := vero.NewRouter()
+
+	// Add a job.  The reply is the new state, so the interface cannot draw
+	// the list from before its own change.
+	vero.Handle(r, "addJob", func(_ context.Context, _ struct{}) (Status, error) {
+		mu.Lock()
+		n := len(jobs) + 1
+		jobs = append(jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
+		mu.Unlock()
+		return snapshot(), nil
+	})
+
+	// Send one back to the beginning.
 	vero.Handle(r, "restartJob", func(_ context.Context, req RestartJob) (Status, error) {
 		mu.Lock()
 		for i := range jobs {
@@ -135,7 +137,7 @@ Replace `ContentView.swift` with this:
 import SwiftUI
 import Vero
 
-// The same two types, and the same request name, as the worker.
+// The same two types, and the same request names, as the worker.
 struct Job: Decodable, Identifiable {
     let id: Int
     let name: String
@@ -144,6 +146,11 @@ struct Job: Decodable, Identifiable {
 
 struct Status: Decodable {
     let jobs: [Job]
+}
+
+struct AddJob: NamedRequest {
+    static let name = "addJob"
+    typealias Reply = Status
 }
 
 struct RestartJob: NamedRequest {
@@ -161,9 +168,18 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let problem = vero.problem {
-                Text(problem).foregroundStyle(.orange).padding(8)
+            HStack {
+                // Nothing to do with the reply: the worker pushes the new
+                // state, and that is what redraws this list.
+                Button("Add job") { vero.call(AddJob()) }
+                    .disabled(vero.isBusy)
+                Spacer()
+                if let problem = vero.problem {
+                    Text(problem).foregroundStyle(.orange)
+                }
             }
+            .padding(8)
+
             List(vero.state?.jobs ?? []) { job in
                 HStack {
                     Button { vero.call(RestartJob(id: job.id)) } label: {
@@ -176,44 +192,64 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 320, minHeight: 200)
+        .frame(minWidth: 320, minHeight: 240)
     }
 }
 ```
 
 ### 3. Run it
 
-Two jobs appear, their progress climbs, and the button sends a request that
-sets one back to zero.
+Two jobs appear and their progress climbs. **Add job** puts a third in the
+list, and the arrow beside a job sends it back to the beginning. Neither
+button does anything to the list itself: they ask the worker, the worker
+changes its state, and the view redraws because that state was pushed.
 
-That is the whole interface to vero: `VeroModel` holds the worker and the last
-state it pushed, `vero.state` is that state, and `vero.call` asks for
-something. There is no supervisor to write, no polling, no in-flight counting
-and no copying the worker out of the bundle - and `vero.worker` is there for
-anything this does not cover.
+## The same worker, with Windows and Linux interfaces
 
-## Two things worth knowing
+Windows and Linux do not get a port of the worker. They get the same `main.go`,
+built for that platform, behind an interface drawn with that platform's own
+toolkit - and the three examples in this repository are exactly that: one
+worker, three interfaces.
 
-**Emit one type.** The event envelope carries no name, so `events(T.self)`
-decodes every payload as `T` and quietly skips what does not fit - telling
-types apart by structural accident rather than by name. `latest` is a single
-slot holding the most recent event whatever its type, so with two types a
-window opening draws blank whenever the other one arrived last. Widen the type
-you have rather than adding a second, which is what `EmitOnChange` and its
-single snapshot already push you towards.
+Each interface needs two things from here: **the worker**, built for that
+platform, and **the C shared library** that carries the protocol, built from
+[cshim](cshim). macOS is the exception that needs no library of its own,
+because the Swift package ships the archive.
 
-**A debug build always takes the worker from the bundle.** Rebuild a worker
-without bumping its version and the copy on disk would otherwise stay - it is
-the same version, so replacing it would be wrong - and the change under test
-would never run, with nothing to say why. So in a debug build there is nothing
-to remember: build the worker, run, and it is the one you just built.
+| | the library | the interface |
+|---|---|---|
+| Windows | `vero.dll` | WPF, C# — [example/wpf-app](example/wpf-app) |
+| Linux | `libvero.so` | GTK4, Python — [example/gtk-app](example/gtk-app) |
 
-## Next
+Both can be built from your Mac. WPF needs Windows to run but not to build, so
+the .NET SDK on macOS produces the application; `libvero.so` has to be built on
+Linux, because `-buildmode=c-shared` on a Mac produces a Mach-O dylib rather
+than an ELF shared object, and `scripts/run-linux.sh` does that in a container.
+Each example's README has the exact commands, and
+[docs/building.md](docs/building.md) has all of them in one place.
+
+The interface code is small in both. The bindings expose the same three things
+the Swift one does - the state the worker pushed, an event when it changes, and
+a call - so [bindings/csharp](bindings/csharp) and
+[bindings/python](bindings/python) are the whole of what a new interface has to
+learn.
+
+## Run all three
+
+```bash
+git clone https://github.com/calmdocs/vero && cd vero
+./scripts/setup.sh                              # installs toolchains, builds everything
+./scripts/run.sh --iso ~/Downloads/win11.iso    # opens all three
+```
+
+`--iso` is a Windows 11 Arm64 ISO, needed only the first time: `run.sh`
+installs Windows into a VM once and reuses it after that.
+
+## More
 
 | | |
 |---|---|
 | [example/menubar-app](example/menubar-app) | the macOS example in full (SwiftUI) |
-| [example/wpf-app](example/wpf-app) · [example/gtk-app](example/gtk-app) | the same worker on Windows and Linux |
 | [docs/building.md](docs/building.md) | every build command, and what each script does |
 | [docs/design.md](docs/design.md) | what runs where, and why pipes |
 | [docs/protocol.md](docs/protocol.md) | wire format, errors, the single-worker lock |
