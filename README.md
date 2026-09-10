@@ -2,9 +2,6 @@
 
 **A Go backend with native macOS, Windows and Linux frontends.**
 
-SwiftUI, WPF and GTK, talking to the Go worker over pipes. Build all three from
-one Mac.
-
 <table>
 <tr>
 <td align="center" width="33%"><img src="docs/screenshots/macos.gif" width="100%"><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
@@ -12,8 +9,6 @@ one Mac.
 <td align="center" width="33%"><img src="docs/screenshots/linux.gif" width="100%"><br><sub><b>Linux</b> — GTK4</sub></td>
 </tr>
 </table>
-
-Three interfaces, one Go worker, stock controls, no styling.
 
 ## Run the examples
 
