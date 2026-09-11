@@ -5,7 +5,6 @@
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
-[Release builds](#release-builds) ·
 [All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
 [More](#more) ·
 [Tests](#tests)
@@ -374,8 +373,8 @@ and their progress climbs. **Add job** puts a third in the list, and the arrow
 beside a job sends it back to the beginning.
 
 No Windows machine? `./scripts/run-windows.sh` boots one in a VM on your Mac
-with this build on a disc. [example/wpf-app](example/wpf-app) is the same app,
-styled.
+with this build on a disc. [example/wpf-app](example/wpf-app) is the Windows
+example in full: the same app with job phases and a status footer.
 
 ## Linux: Add the same worker to a Linux app
 
@@ -516,68 +515,9 @@ open vnc://localhost:5901
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-[example/gtk-app](example/gtk-app) is the same app, styled.
-`./scripts/run-linux.sh` runs it this way in one command.
-
-## Release builds
-
-The three sections above build a copy that runs on the machine that built it.
-These are the builds you hand to someone else.
-
-### macOS
-
-Step 1 already builds the worker universal. A thin one runs on one
-architecture only.
-
-Give the worker a version, so the app can tell its own copy apart from the one
-it ships:
-
-```go
-var opts vero.WorkerOptions
-opts.Version = "1.0.0"
-opts.RegisterFlags(flag.CommandLine)
-flag.Parse()
-opts.PrintVersionAndExit()
-
-w := vero.NewWorker(opts)
-```
-
-Then in Xcode:
-
-- drag `worker` into the app target's **Copy Bundle Resources**
-- **Product → Archive → Distribute App → Developer ID**, which signs and
-  notarises the worker along with the app
-
-`VeroModel(bundledWorker:directoryName:)` copies the worker out of the signed
-bundle into `~/Library/Application Support/<directoryName>` and runs it from
-there, replacing that copy when the app ships a newer version. Without
-`-version` it compares checksums instead.
-
-### Windows
-
-The publish in step 3 is already a release build. Ship the whole `out/`
-directory: `VeroExample.exe`, `vero.dll` and `worker.exe`.
-
-For both architectures, publish twice, each with its own `vero.dll` and
-`worker.exe` beside it:
-
-```bash
-dotnet publish -c Release -r win-arm64 --self-contained \
-    -p:EnableWindowsTargeting=true -o out-arm64
-dotnet publish -c Release -r win-x64 --self-contained \
-    -p:EnableWindowsTargeting=true -o out-x64
-```
-
-### Linux
-
-Nothing to build. Ship one directory holding four files:
-
-| | |
-|---|---|
-| `main.py`, `vero.py` | the app, and the binding |
-| `libvero.so`, `worker` | from step 1 |
-
-The machine needs `python3-gi` and `gir1.2-gtk-4.0` installed.
+[example/gtk-app](example/gtk-app) is the Linux example in full: the same app
+with job phases and a status footer. `./scripts/run-linux.sh` runs it this way
+in one command.
 
 ## Set up and run all three apps in three lines
 
@@ -595,10 +535,6 @@ installs Windows into a VM once and reuses it after that.
 | | |
 |---|---|
 | [example/menubar-app](example/menubar-app) | the macOS example in full (SwiftUI) |
-| [docs/building.md](docs/building.md) | every build command, and what each script does |
-| [docs/design.md](docs/design.md) | what runs where, and why pipes |
-| [docs/protocol.md](docs/protocol.md) | wire format, errors, the single-worker lock |
-| [docs/styling.md](docs/styling.md) | the same examples, styled |
 
 ## Tests
 
