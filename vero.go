@@ -70,7 +70,8 @@ type Envelope struct {
 	// ID matches a reply to the request that caused it.  Events have none.
 	ID uint64 `json:"id,omitempty"`
 
-	// Name routes a request to a handler, when a Router is used.  Empty when
+	// Name routes a request to a handler registered with Handle or Update.
+	// Empty when
 	// the worker has a single handler that dispatches for itself.
 	//
 	// It lives here rather than inside the payload so that vero can route

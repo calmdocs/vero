@@ -18,31 +18,21 @@ import (
 // until one succeeds - and an empty JSON array decodes as any of them, so a
 // list that happens to be empty is read as whatever was tried first.
 //
-//	r := vero.NewRouter()
-//	vero.Handle(r, "getGroups", func(ctx context.Context, _ struct{}) ([]Group, error) {
+//	vero.Handle(w, "getGroups", func(ctx context.Context, _ struct{}) ([]Group, error) {
 //	    return groups(), nil
 //	})
-//	vero.Update(r, "addGroup", func(ctx context.Context, req AddGroup) error {
+//	vero.Update(w, "addGroup", func(ctx context.Context, req AddGroup) error {
 //	    return add(req.Name)
 //	})
-//	w.Serve(r)
+//	w.Serve()
 //
 // The name travels in the envelope, so an application's own messages stay
 // exactly as it defined them.
-type Router struct {
+type router struct {
 	mu       sync.RWMutex
 	routes   map[string]route
 	fallback Handler
 	fellBack atomic.Uint64
-	state    func() any // WorkerOptions.State, handed over by Serve
-}
-
-// useState is how Serve gives the router the worker's state function, so a
-// handler registered with Update has something to reply with.
-func (r *Router) useState(state func() any) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.state = state
 }
 
 type route struct {
@@ -50,9 +40,8 @@ type route struct {
 	fn   func(context.Context, json.RawMessage) (any, error)
 }
 
-// NewRouter returns an empty Router.
-func NewRouter() *Router {
-	return &Router{routes: map[string]route{}}
+func newRouter() *router {
+	return &router{routes: map[string]route{}}
 }
 
 // Handle registers a handler for one request name.
@@ -63,7 +52,8 @@ func NewRouter() *Router {
 //
 // It is a function rather than a method because Go does not allow methods to
 // introduce type parameters.
-func Handle[Req any, Rep any](r *Router, name string, fn func(ctx context.Context, request Req) (Rep, error)) {
+func Handle[Req any, Rep any](w *Worker, name string, fn func(ctx context.Context, request Req) (Rep, error)) {
+	r := w.router
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, taken := r.routes[name]; taken {
@@ -89,18 +79,15 @@ func Handle[Req any, Rep any](r *Router, name string, fn func(ctx context.Contex
 // The reply is WorkerOptions.State, which Serve hands to the router, and the
 // handler itself returns only an error.  Use Handle when the reply is
 // something other than the state.
-func Update[Req any](r *Router, name string, fn func(ctx context.Context, request Req) error) {
-	Handle(r, name, func(ctx context.Context, request Req) (any, error) {
+func Update[Req any](w *Worker, name string, fn func(ctx context.Context, request Req) error) {
+	Handle(w, name, func(ctx context.Context, request Req) (any, error) {
 		if err := fn(ctx, request); err != nil {
 			return nil, err
 		}
-		r.mu.RLock()
-		state := r.state
-		r.mu.RUnlock()
-		if state == nil {
+		if w.opts.State == nil {
 			return nil, fmt.Errorf("vero: %s replies with the state, but WorkerOptions.State is not set", name)
 		}
-		return state(), nil
+		return w.opts.State(), nil
 	})
 }
 
@@ -114,7 +101,7 @@ func Update[Req any](r *Router, name string, fn func(ctx context.Context, reques
 // setting when an interface can be newer than the worker it is driving: it
 // then asks for things this build has never heard of, and refusing is a
 // failure the person did not cause and cannot act on.
-func (r *Router) Fallback(h Handler) {
+func (r *router) Fallback(h Handler) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.fallback = h
@@ -127,10 +114,10 @@ func (r *Router) Fallback(h Handler) {
 // still running this climbs. When it stays at zero across a release, nothing
 // is using the untyped path and both it and the fallback can be deleted -
 // which is what makes typed routing the only way in.
-func (r *Router) FallbackCalls() uint64 { return r.fellBack.Load() }
+func (r *router) FallbackCalls() uint64 { return r.fellBack.Load() }
 
 // Names lists what has been registered, in no particular order.
-func (r *Router) Names() []string {
+func (r *router) Names() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]string, 0, len(r.routes))
@@ -140,7 +127,7 @@ func (r *Router) Names() []string {
 	return out
 }
 
-func (r *Router) route(ctx context.Context, name string, payload json.RawMessage) (any, error) {
+func (r *router) route(ctx context.Context, name string, payload json.RawMessage) (any, error) {
 	r.mu.RLock()
 	rt, ok := r.routes[name]
 	fallback := r.fallback

@@ -183,7 +183,7 @@ func (s *Supervisor) Request(ctx context.Context, request any) (json.RawMessage,
 }
 
 // Call sends a request to the handler registered under name, for a worker
-// using a Router.
+// registered by name.
 //
 // The name travels beside the payload rather than inside it, so an
 // application's own message types stay exactly as it defined them.

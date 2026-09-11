@@ -87,8 +87,9 @@ func (o *WorkerOptions) PrintVersionAndExit() {
 
 // Worker is the logic half of a vero application.
 type Worker struct {
-	opts  WorkerOptions
-	serve bool // a supervisor launched us, so stdin carries requests
+	opts   WorkerOptions
+	serve  bool // a supervisor launched us, so stdin carries requests
+	router *router
 
 	in  io.Reader
 	out io.Writer
@@ -119,11 +120,12 @@ type Worker struct {
 // reassigns is a data race, and one the race detector will find.
 func NewWorker(opts WorkerOptions) *Worker {
 	w := &Worker{
-		opts:  opts,
-		serve: os.Getenv(envServe) != "",
-		in:    os.Stdin,
-		out:   os.Stdout,
-		err:   os.Stderr,
+		opts:   opts,
+		router: newRouter(),
+		serve:  os.Getenv(envServe) != "",
+		in:     os.Stdin,
+		out:    os.Stdout,
+		err:    os.Stderr,
 	}
 	if w.serve {
 		// Take the real stdout for the protocol, and send everyone else's
@@ -228,16 +230,26 @@ func (w *Worker) Run(h Handler) error {
 	})
 }
 
-// Serve answers requests by name, using a Router.
+// Serve answers the requests registered with Handle and Update.
 //
 // Otherwise identical to Run: it blocks, it returns when the interface goes
 // away, and on its own it never returns.
-func (w *Worker) Serve(r *Router) error {
-	r.useState(w.opts.State)
+func (w *Worker) Serve() error {
 	return w.serveEnvelopes(func(ctx context.Context, e Envelope) (any, error) {
-		return r.route(ctx, e.Name, e.Payload)
+		return w.router.route(ctx, e.Name, e.Payload)
 	})
 }
+
+// Fallback answers requests whose name matches nothing registered, including
+// requests that carry no name at all.
+func (w *Worker) Fallback(h Handler) { w.router.Fallback(h) }
+
+// FallbackCalls counts the requests that have reached the fallback, so an
+// application can tell when the old shape has stopped being used.
+func (w *Worker) FallbackCalls() uint64 { return w.router.FallbackCalls() }
+
+// Names lists the registered request names.
+func (w *Worker) Names() []string { return w.router.Names() }
 
 func (w *Worker) serveEnvelopes(dispatch func(context.Context, Envelope) (any, error)) error {
 	// Cancelled when standard input closes, which is how the interface says

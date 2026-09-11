@@ -94,25 +94,23 @@ func main() {
 
 	// One handler per request, each with its own types, so neither side has to
 	// agree on a "type" field inside the message.
-	r := vero.NewRouter()
-
-	vero.Handle(r, "status", func(context.Context, struct{}) (Status, error) {
+	vero.Handle(w, "status", func(context.Context, struct{}) (Status, error) {
 		// Something opened a window and needs to draw it now.
 		return snapshot(), nil
 	})
 
-	vero.Update(r, "restartJob", func(_ context.Context, req RestartJob) error {
+	vero.Update(w, "restartJob", func(_ context.Context, req RestartJob) error {
 		return restart(req.ID)
 	})
 
 	// An interface that has not moved to named handlers keeps working: this
-	// takes anything the router has no name for.  r.FallbackCalls() reports
+	// takes anything the router has no name for.  w.FallbackCalls() reports
 	// when it has stopped being used and can go.
-	r.Fallback(handle)
+	w.Fallback(handle)
 
 	// Serve blocks. Under an interface it answers requests until that
 	// interface quits; on its own it simply never returns.
-	if err := w.Serve(r); err != nil {
+	if err := w.Serve(); err != nil {
 		w.Log("stopped: %v", err)
 	}
 	w.Log("the interface has gone; stopping")
@@ -141,7 +139,7 @@ func handle(ctx context.Context, request json.RawMessage) (any, error) {
 
 // version is what -version reports. An interface compares it with the copy it
 // has on disk, so it has to increase on every release.
-var version = "0.3.0"
+var version = "0.4.0"
 
 // work is the pretend business logic: it moves jobs along and says so.
 func work(w *vero.Worker) {

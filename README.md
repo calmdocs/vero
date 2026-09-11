@@ -77,62 +77,75 @@ type RestartJob struct {
 	ID int `json:"id"`
 }
 
-var (
+// The jobs, and the lock that guards them.  Nothing else touches the slice.
+type store struct {
 	mu   sync.Mutex
-	jobs = []Job{{ID: 1, Name: "Photos"}, {ID: 2, Name: "Documents"}}
-)
+	jobs []Job
+}
 
-func snapshot() Status {
-	mu.Lock()
-	defer mu.Unlock()
-	return Status{Jobs: append([]Job(nil), jobs...)}
+// status is a copy, so what the interface is sent cannot change underneath it.
+func (s *store) status() Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return Status{Jobs: append([]Job(nil), s.jobs...)}
+}
+
+func (s *store) add() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := len(s.jobs) + 1
+	s.jobs = append(s.jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
+}
+
+func (s *store) restart(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.jobs {
+		if s.jobs[i].ID == id {
+			s.jobs[i].Progress = 0
+		}
+	}
+}
+
+// The actual work.  Yours goes here.
+func (s *store) advance() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.jobs {
+		if s.jobs[i].Progress < 100 {
+			s.jobs[i].Progress++
+		}
+	}
 }
 
 func main() {
+	jobs := &store{jobs: []Job{{ID: 1, Name: "Photos"}, {ID: 2, Name: "Documents"}}}
+
 	// Everything the interface draws. vero pushes it whenever it changes, and
 	// an Update handler replies with it.
-	w := vero.NewWorker(vero.WorkerOptions{State: func() any { return snapshot() }})
+	w := vero.NewWorker(vero.WorkerOptions{State: func() any { return jobs.status() }})
 
-	// The actual work.  Yours goes here.
 	go func() {
 		for range time.Tick(200 * time.Millisecond) {
-			mu.Lock()
-			for i := range jobs {
-				if jobs[i].Progress < 100 {
-					jobs[i].Progress++
-				}
-			}
-			mu.Unlock()
+			jobs.advance()
 		}
 	}()
 
-	r := vero.NewRouter()
-
-	// Add a job.  Update replies with the new state, so the interface cannot
-	// draw the list from before its own change.
-	vero.Update(r, "addJob", func(_ context.Context, _ struct{}) error {
-		mu.Lock()
-		n := len(jobs) + 1
-		jobs = append(jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
-		mu.Unlock()
+	// Update replies with the new state, so the interface cannot draw the
+	// list from before its own change.
+	vero.Update(w, "addJob", func(context.Context, struct{}) error {
+		jobs.add()
 		return nil
 	})
 
-	// Send one back to the beginning.
-	vero.Update(r, "restartJob", func(_ context.Context, req RestartJob) error {
-		mu.Lock()
-		for i := range jobs {
-			if jobs[i].ID == req.ID {
-				jobs[i].Progress = 0
-			}
-		}
-		mu.Unlock()
+	vero.Update(w, "restartJob", func(_ context.Context, req RestartJob) error {
+		jobs.restart(req.ID)
 		return nil
 	})
 
 	// Blocks until the interface goes away, then returns so this process can
 	// leave with it.
-	w.Serve(r)
+	w.Serve()
 }
 ```
 
