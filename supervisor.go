@@ -71,6 +71,8 @@ const (
 	Stopped
 )
 
+// String is what the bindings report: "starting", "running",
+// "restarting" or "stopped".
 func (s RunState) String() string {
 	switch s {
 	case Starting:

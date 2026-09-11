@@ -2,6 +2,8 @@
 
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
+[![Go reference](https://pkg.go.dev/badge/github.com/calmdocs/vero.svg)](https://pkg.go.dev/github.com/calmdocs/vero)
+
 [Quickstart on macOS](#quickstart-on-macos) ·
 [The go worker](#the-go-worker) ·
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
@@ -551,6 +553,9 @@ to zero and the pause button stops and starts it.
 | [example/menubar-app](example/menubar-app) | macOS, SwiftUI |
 | [example/wpf-app](example/wpf-app) | Windows, WPF |
 | [example/gtk-app](example/gtk-app) | Linux, GTK4 |
+
+The Go API, with runnable examples:
+[pkg.go.dev/github.com/calmdocs/vero](https://pkg.go.dev/github.com/calmdocs/vero).
 
 The repository's own tests:
 

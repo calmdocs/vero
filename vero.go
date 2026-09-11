@@ -112,6 +112,7 @@ var ErrWorkerNotRunning = errors.New("vero: the worker is not running")
 // RemoteError is what a Handler's error becomes on the other side of the pipe.
 type RemoteError struct{ Message string }
 
+// Error is the worker's own message, not vero's.
 func (e *RemoteError) Error() string { return "vero: worker refused the request: " + e.Message }
 
 // DefaultStateInterval is how often WorkerOptions.State is sampled for a
