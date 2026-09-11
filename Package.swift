@@ -18,8 +18,8 @@ let package = Package(
         // carries the archive with it and nobody has to build one.
         .binaryTarget(
             name: "CVero",
-            url: "https://github.com/calmdocs/vero/releases/download/v0.1.0/CVero.xcframework.zip",
-            checksum: "093bde149bfc90bc2908990fcc63f136ddb9f635f15d346013729d919ec60680"
+            url: "https://github.com/calmdocs/vero/releases/download/v0.2.0/CVero.xcframework.zip",
+            checksum: "513a26138c8e4f3bbc84bba63fc40884474ff8d144954ead086db13cf78c1afd"
         ),
         .target(name: "Vero", dependencies: ["CVero"]),
     ]
