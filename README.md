@@ -19,7 +19,7 @@
 
 ## 1. macOS: Add vero to your own macOS app
 
-### 1.1 The go worker
+### 1. The go worker
 
 ```bash
 mkdir worker && cd worker
@@ -131,7 +131,7 @@ lipo -create worker-amd64 worker-arm64 -output worker
 That is the only binary you build. The C archive vero links ships with the
 Swift package.
 
-### 1.2 The macOS SwiftUI app
+### 2. The macOS SwiftUI app
 
 Create a new macOS SwiftUI project, then File -> Add Package Dependencies... ->
 `https://github.com/calmdocs/vero`, and drag `worker` into the project.
@@ -200,15 +200,15 @@ struct ContentView: View {
 }
 ```
 
-### 1.3 Run it
+### 3. Run it
 
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
 ## 2. Windows: Add the same worker to a Windows app
 
-The `main.go` from step 1.1 is unchanged, and every step below runs on your
-Mac. Only step 2.4 needs Windows.
+The `main.go` from step 1 is unchanged, and every step below runs on your
+Mac. Only step 4 needs Windows.
 
 Install these once:
 
@@ -221,12 +221,12 @@ Match the Windows machine you will run on, not the Mac you are building on.
 Every step below targets ARM. For an x64 machine, three things change:
 
 - the compiler is `x86_64-w64-mingw32-gcc`, from `brew install mingw-w64`
-- both commands in step 2.1 take `GOARCH=amd64`
-- step 2.3 publishes `-r win-x64`
+- both commands in step 1 take `GOARCH=amd64`
+- step 3 publishes `-r win-x64`
 
-### 2.1 The go worker, and the library
+### 1. The go worker, and the library
 
-In the `worker` directory from step 1.1:
+In the `worker` directory from step 1:
 
 ```bash
 CGO_ENABLED=1 GOOS=windows GOARCH=arm64 \
@@ -235,7 +235,7 @@ CGO_ENABLED=1 GOOS=windows GOARCH=arm64 \
 CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
 ```
 
-### 2.2 The Windows WPF app
+### 2. The Windows WPF app
 
 Make a directory beside `worker` and copy
 [bindings/csharp/Vero.cs](bindings/csharp/Vero.cs) into it. Add these four
@@ -355,7 +355,7 @@ public partial class MainWindow : Window
 }
 ```
 
-### 2.3 Build it
+### 3. Build it
 
 ```bash
 dotnet publish -c Release -r win-arm64 --self-contained \
@@ -366,7 +366,7 @@ cp ../worker/vero.dll ../worker/worker.exe out/
 Keep both names: `Vero.cs` imports `vero.dll` by name, and `MainWindow.xaml.cs`
 looks for `worker.exe` beside the executable.
 
-### 2.4 Run it
+### 4. Run it
 
 Copy `out/` to a Windows machine and run `VeroExample.exe`. Two jobs appear
 and their progress climbs. **Add job** puts a third in the list, and the arrow
@@ -378,8 +378,8 @@ styled.
 
 ## 3. Linux: Add the same worker to a Linux app
 
-The `main.go` from step 1.1 is unchanged, and every step below runs on your
-Mac as well. The library is built in a container, because `-buildmode=c-shared` on
+The `main.go` from step 1 is unchanged, and every step below runs on your Mac
+as well. The library is built in a container, because `-buildmode=c-shared` on
 a Mac emits a Mach-O dylib rather than an ELF shared object.
 
 Install Docker once:
@@ -388,9 +388,9 @@ Install Docker once:
 brew install colima docker && colima start
 ```
 
-### 3.1 The go worker, and the library
+### 1. The go worker, and the library
 
-Run these in the `worker` directory from step 1.1, which has to sit somewhere
+Run these in the `worker` directory from step 1, which has to sit somewhere
 under your home directory: colima shares only `$HOME` with the container, so a
 build mounted from anywhere else finishes without error and leaves no files.
 
@@ -403,11 +403,11 @@ docker run --rm -v "$PWD":/src -w /src \
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o worker-linux .
 ```
 
-### 3.2 The Linux GTK4 app
+### 2. The Linux GTK4 app
 
 Make a directory beside `worker` and copy
 [bindings/python/vero.py](bindings/python/vero.py) into it, along with the two
-files from step 3.1:
+files from step 1:
 
 ```bash
 cp ../worker/libvero.so .
@@ -482,7 +482,7 @@ app.connect("activate", lambda a: Window(a).present())
 app.run(None)
 ```
 
-### 3.3 Run it
+### 3. Run it
 
 On a Linux machine, install `python3-gi` and `gir1.2-gtk-4.0`, then:
 
