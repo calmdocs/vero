@@ -142,7 +142,7 @@ func handle(ctx context.Context, request json.RawMessage) (any, error) {
 
 // version is what -version reports. An interface compares it with the copy it
 // has on disk, so it has to increase on every release.
-var version = "0.1.0"
+var version = "0.2.0"
 
 // work is the pretend business logic: it moves jobs along and says so.
 func work(w *vero.Worker) {
