@@ -5,7 +5,7 @@
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
-[Shipping it](#shipping-it) ·
+[Release builds](#release-builds) ·
 [All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
 [More](#more) ·
 [Tests](#tests)
@@ -519,42 +519,65 @@ list, and the arrow beside a job sends it back to the beginning.
 [example/gtk-app](example/gtk-app) is the same app, styled.
 `./scripts/run-linux.sh` runs it this way in one command.
 
-## Shipping it
+## Release builds
 
-The three sections above run the app on your own machine. Three things change
-when someone else runs it.
+The three sections above build a copy that runs on the machine that built it.
+These are the builds you hand to someone else.
 
-### 1. Handle the three failures
+### macOS
 
-| | | |
-|---|---|---|
-| **refused** | your handler returned an error | show it |
-| **notRunning** | the worker is starting or restarting | retry |
-| **alreadyRunning** | another copy of your app has the worker | say so, and do not retry |
+Step 1 already builds the worker universal. A thin one runs on one
+architecture only.
 
-The names are `VeroError.refused(let message)`, `.notRunning` and
-`.alreadyRunning(let message)` in Swift; `Refused`, `NotRunning` and
-`AlreadyRunning` in Python; `RefusedException`, `NotRunningException` and
-`AlreadyRunningException` in C#.
+Give the worker a version, so the app can tell its own copy apart from the one
+it ships:
 
-### 2. One worker at a time
+```go
+var opts vero.WorkerOptions
+opts.Version = "1.0.0"
+opts.RegisterFlags(flag.CommandLine)
+flag.Parse()
+opts.PrintVersionAndExit()
 
-Your app in `/Applications` and the copy still in `~/Downloads` are two
-processes, and the user can open both. Each copies the worker to the same path,
-so the first to start takes the lock and the second gets `alreadyRunning`
-rather than a second worker writing the same state as the first.
+w := vero.NewWorker(opts)
+```
 
-The lock is on by default, keyed on the worker's path, and the operating system
-releases it when the process exits, including after a crash.
+Then in Xcode:
 
-### 3. One interface per worker
+- drag `worker` into the app target's **Copy Bundle Resources**
+- **Product → Archive → Distribute App → Developer ID**, which signs and
+  notarises the worker along with the app
 
-The interface talks to the worker down the standard input and output it created
-when it launched it, so no other process can. Several clients attached to one
-running worker needs a socket instead:
-[keyexchange](https://github.com/calmdocs/keyexchange) and
-[SwiftKeyExchange](https://github.com/calmdocs/SwiftKeyExchange) are the
-calmdocs libraries for that.
+`VeroModel(bundledWorker:directoryName:)` copies the worker out of the signed
+bundle into `~/Library/Application Support/<directoryName>` and runs it from
+there, replacing that copy when the app ships a newer version. Without
+`-version` it compares checksums instead.
+
+### Windows
+
+The publish in step 3 is already a release build. Ship the whole `out/`
+directory: `VeroExample.exe`, `vero.dll` and `worker.exe`.
+
+For both architectures, publish twice, each with its own `vero.dll` and
+`worker.exe` beside it:
+
+```bash
+dotnet publish -c Release -r win-arm64 --self-contained \
+    -p:EnableWindowsTargeting=true -o out-arm64
+dotnet publish -c Release -r win-x64 --self-contained \
+    -p:EnableWindowsTargeting=true -o out-x64
+```
+
+### Linux
+
+Nothing to build. Ship one directory holding four files:
+
+| | |
+|---|---|
+| `main.py`, `vero.py` | the app, and the binding |
+| `libvero.so`, `worker` | from step 1 |
+
+The machine needs `python3-gi` and `gir1.2-gtk-4.0` installed.
 
 ## Set up and run all three apps in three lines
 
