@@ -5,6 +5,7 @@
 #   scripts/run-windows.sh --iso ~/Downloads/win11.iso --install   # first time
 #   scripts/run-windows.sh                                         # every time after
 #   scripts/run-windows.sh --headless                              # no window; QMP on the socket
+#   scripts/run-windows.sh --payload out                           # your own build, not the example
 #
 # Needs: brew install qemu, and a Windows 11 ARM64 ISO from Microsoft.
 # Run scripts/build-all.sh first - the disc is made from dist/.
@@ -14,6 +15,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 VM=${VM:-$HOME/vm/vero-windows}
 ISO=""
 INSTALL=no
+PAYLOAD=""
 DISPLAY_ARGS="-display cocoa"
 QMP=/tmp/vero-qmp.sock          # short on purpose: unix paths cap at 104 bytes
 
@@ -23,6 +25,7 @@ while [ $# -gt 0 ]; do
         --iso)      ISO=${2:?--iso needs a file}; shift 2 ;;
         --install)  INSTALL=yes; shift ;;
         --headless) DISPLAY_ARGS="-display none -vnc 127.0.0.1:1"; shift ;;
+        --payload)  PAYLOAD=${2:?--payload needs a directory}; shift 2 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -35,10 +38,11 @@ mkdir -p "$VM"
 [ -f "$VM/vars.fd" ]    || { cp "$FW/edk2-arm-vars.fd" "$VM/vars.fd"; echo "made $VM/vars.fd"; }
 
 # Build the Windows pieces if they are not there, so this works on its own.
+# With --payload the directory already holds them, so none of this runs.
 ARM_CC=$(command -v aarch64-w64-mingw32-clang 2>/dev/null || true)
 [ -z "$ARM_CC" ] && [ -x "$HOME/toolchains/llvm-mingw/bin/aarch64-w64-mingw32-clang" ] \
     && ARM_CC="$HOME/toolchains/llvm-mingw/bin/aarch64-w64-mingw32-clang"
-if [ ! -f "$ROOT/dist/vero-arm64.dll" ] || [ ! -f "$ROOT/dist/worker-windows-arm64.exe" ]; then
+if [ -z "$PAYLOAD" ] && { [ ! -f "$ROOT/dist/vero-arm64.dll" ] || [ ! -f "$ROOT/dist/worker-windows-arm64.exe" ]; }; then
     [ -n "$ARM_CC" ] || { echo "need llvm-mingw for windows/arm64 - see the README" >&2; exit 1; }
     echo "building the Windows pieces"
     mkdir -p "$ROOT/dist"
@@ -51,22 +55,28 @@ if [ ! -f "$ROOT/dist/vero-arm64.dll" ] || [ ! -f "$ROOT/dist/worker-windows-arm
 fi
 DOTNET=$(command -v dotnet 2>/dev/null || true)
 [ -z "$DOTNET" ] && [ -x "$HOME/.dotnet/dotnet" ] && DOTNET="$HOME/.dotnet/dotnet"
-if [ ! -d "$ROOT/dist/wpf-arm64" ] && [ -n "$DOTNET" ]; then
+if [ -z "$PAYLOAD" ] && [ ! -d "$ROOT/dist/wpf-arm64" ] && [ -n "$DOTNET" ]; then
     echo "publishing the WPF example (once; a minute or two)"
     ( cd "$ROOT/example/wpf-app" && "$DOTNET" publish -c Release -r win-arm64 \
         --self-contained -p:EnableWindowsTargeting=true -o "$ROOT/dist/wpf-arm64" -v quiet ) >/dev/null
 fi
 
 # The payload disc: how a build gets in without networking or shared folders.
-echo "packing the build onto a disc"
 STAGE=$(mktemp -d); mkdir -p "$STAGE/vero"
-cp "$ROOT/dist/vero-arm64.dll"          "$STAGE/vero/vero.dll"
-cp "$ROOT/dist/worker-windows-arm64.exe" "$STAGE/vero/worker.exe"
-if [ -d "$ROOT/dist/wpf-arm64" ]; then
-    cp -R "$ROOT/dist/wpf-arm64/." "$STAGE/vero/"
-    echo "  including the WPF example"
+if [ -n "$PAYLOAD" ]; then
+    [ -d "$PAYLOAD" ] || { echo "no such directory: $PAYLOAD" >&2; exit 2; }
+    echo "packing $PAYLOAD onto a disc"
+    cp -R "$PAYLOAD/." "$STAGE/vero/"
 else
-    echo "  no dist/wpf-arm64: shipping vero.dll and worker.exe only"
+    echo "packing the build onto a disc"
+    cp "$ROOT/dist/vero-arm64.dll"          "$STAGE/vero/vero.dll"
+    cp "$ROOT/dist/worker-windows-arm64.exe" "$STAGE/vero/worker.exe"
+    if [ -d "$ROOT/dist/wpf-arm64" ]; then
+        cp -R "$ROOT/dist/wpf-arm64/." "$STAGE/vero/"
+        echo "  including the WPF example"
+    else
+        echo "  no dist/wpf-arm64: shipping vero.dll and worker.exe only"
+    fi
 fi
 rm -f "$VM/payload.iso"
 hdiutil makehybrid -iso -joliet -o "$VM/payload.iso" "$STAGE" -quiet
