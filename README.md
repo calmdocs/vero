@@ -2,6 +2,13 @@
 
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
+[macOS](#add-vero-to-your-own-macos-app) ·
+[Windows](#add-the-same-worker-to-a-windows-app) ·
+[Linux](#add-the-same-worker-to-a-linux-app) ·
+[All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
+[More](#more) ·
+[Tests](#tests)
+
 <table>
 <tr>
 <td align="center" width="33%"><a href="#add-vero-to-your-own-macos-app"><img src="docs/screenshots/macos.gif" width="100%"></a><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
@@ -9,13 +16,6 @@
 <td align="center" width="33%"><a href="#add-the-same-worker-to-a-linux-app"><img src="docs/screenshots/linux.gif" width="100%"></a><br><sub><b>Linux</b> — GTK4</sub></td>
 </tr>
 </table>
-
-[macOS](#add-vero-to-your-own-macos-app) ·
-[Windows](#add-the-same-worker-to-a-windows-app) ·
-[Linux](#add-the-same-worker-to-a-linux-app) ·
-[All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
-[More](#more) ·
-[Tests](#tests)
 
 ## Add vero to your own macOS app
 
