@@ -18,8 +18,8 @@
 
 ## The worker
 
-All three platforms drive this same Go program. Each section below builds it
-for its own platform.
+All three apps below run this same Go program. Each section builds it for its
+own platform.
 
 ```bash
 brew install go
@@ -123,8 +123,8 @@ func main() {
 
 ## macOS: Add vero to your own macOS app
 
-Install Xcode from the App Store once. Step 1 needs its `lipo`, and step 2 is
-built in it.
+Install Xcode from the App Store, which also installs the `lipo` needed to
+build the Go worker.
 
 ### 1. Build the worker
 
@@ -138,17 +138,45 @@ lipo -create worker-amd64 worker-arm64 -output worker
 
 ### 2. The macOS SwiftUI app
 
-Create a new macOS SwiftUI project. Then:
+Make a package beside `worker`:
 
-- File -> Add Package Dependencies... -> `https://github.com/calmdocs/vero`
-- drag `worker/worker` into the project, ticking your app under **Add to
-  targets**, which is what puts it in the bundle for `bundledWorker:` to find
+```bash
+mkdir -p ../mac-app/Sources/VeroExample && cd ../mac-app
+```
 
-Replace `ContentView.swift` with this:
+`Package.swift`:
+
+```swift
+// swift-tools-version:5.9
+import PackageDescription
+
+let package = Package(
+    name: "VeroExample",
+    platforms: [.macOS(.v13)],
+    dependencies: [
+        .package(url: "https://github.com/calmdocs/vero", from: "0.2.0")
+    ],
+    targets: [
+        .executableTarget(
+            name: "VeroExample",
+            dependencies: [.product(name: "Vero", package: "vero")]
+        )
+    ]
+)
+```
+
+`Sources/VeroExample/VeroExample.swift`:
 
 ```swift
 import SwiftUI
 import Vero
+
+@main
+struct VeroExampleApp: App {
+    var body: some Scene {
+        WindowGroup { ContentView() }
+    }
+}
 
 // The same two types, and the same request names, as the worker.
 struct Job: Decodable, Identifiable {
@@ -210,18 +238,33 @@ struct ContentView: View {
 
 ### 3. Run it
 
-Press Cmd-R. Two jobs appear and their progress climbs. **Add job** puts a
-third in the list. The refresh button beside a job sets that job's progress
-back to zero.
+The worker has to sit beside the executable, which is where vero looks when the
+app is not in a bundle:
+
+```bash
+swift build
+cp ../worker/worker .build/debug/worker
+./.build/debug/VeroExample
+```
+
+Two jobs appear and their progress climbs. **Add job** puts a third in the
+list. The refresh button beside a job sets that job's progress back to zero.
+
+To add vero to an Xcode application instead of this package: File -> Add
+Package Dependencies... -> `https://github.com/calmdocs/vero`, and drag
+`worker/worker` in with your app ticked under **Add to targets**. Xcode writes
+the `@main` App itself, so paste only the types and `ContentView` above.
 
 ## Windows: Add the same worker to a Windows app
 
-Every step below runs on your Mac. Only step 4 needs Windows, on ARM.
+Every step below runs on your Mac. Only step 4 needs a Windows on ARM
+machine, and step 4 can boot one for you.
 
-Install these once, the .NET SDK and a Windows ARM64 C compiler:
+Install the .NET SDK and a Windows ARM64 C compiler, once:
 
 ```bash
-brew install --cask dotnet-sdk
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 8.0
+export PATH="$HOME/.dotnet:$PATH"
 
 mkdir -p ~/toolchains && cd ~/toolchains
 curl -L "$(curl -s https://api.github.com/repos/mstorsjo/llvm-mingw/releases/latest \
@@ -249,7 +292,7 @@ mkdir ../wpf-app && cd ../wpf-app
 curl -O https://raw.githubusercontent.com/calmdocs/vero/main/bindings/csharp/Vero.cs
 ```
 
-Add these four files beside it:
+Add these four files to the same directory:
 
 `VeroExample.csproj`:
 
@@ -365,7 +408,7 @@ public partial class MainWindow : Window
 }
 ```
 
-### 3. Build it
+### 3. Build the app
 
 ```bash
 dotnet publish -c Release -r win-arm64 --self-contained \
@@ -380,19 +423,20 @@ looks for `worker.exe` beside the executable.
 
 On a Windows on ARM machine, run `VeroExample.exe` from `out/`.
 
-No Windows machine? Boot one on your Mac. You need a Windows 11 ARM64 ISO from
-Microsoft; the install is unattended and happens once:
+No Windows machine? Boot one on your Mac:
 
 ```bash
 brew install qemu
 git clone https://github.com/calmdocs/vero
-vero/scripts/run-windows.sh --iso ~/Downloads/win11.iso --install --payload out
+vero/scripts/run-windows.sh --payload out
 ```
 
-After that, every run puts your latest build on a disc inside the VM:
+That boots the VM in `~/vm/vero-windows` with your build on a disc. If there is
+no VM there yet, make one first with a Windows 11 ARM64 ISO from Microsoft. The
+install is unattended and happens once:
 
 ```bash
-vero/scripts/run-windows.sh --payload out
+vero/scripts/run-windows.sh --iso ~/Downloads/win11.iso --install --payload out
 ```
 
 In Windows, copy the `vero` folder off the CD drive and run `VeroExample.exe`.
@@ -401,9 +445,9 @@ list. The refresh button beside a job sets that job's progress back to zero.
 
 ## Linux: Add the same worker to a Linux app
 
-Every step below runs on your Mac. One of them cannot: Go builds a macOS
-library when it runs on a Mac, and Linux cannot load one, so `libvero.so` is
-built in a Linux container instead.
+Every step below runs on your Mac, but Go cannot build a Linux library on a
+Mac: it produces a macOS one, which Linux cannot load. So `libvero.so` is built
+in a Linux container, and everything else on the Mac itself.
 
 Install Docker once:
 
@@ -428,8 +472,8 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o worker-linux .
 
 ### 2. The Linux GTK4 app
 
-Make a directory beside `worker`, fetch the Python binding into it, and bring
-the two files from step 1 with you:
+Make a directory beside `worker`, fetch the Python binding into it, and copy
+in the two files from step 1:
 
 ```bash
 mkdir ../gtk-app && cd ../gtk-app
@@ -550,11 +594,11 @@ git clone https://github.com/calmdocs/vero && cd vero
 ./scripts/run.sh --iso ~/Downloads/win11.iso    # opens all three
 ```
 
-`--iso` is a Windows 11 Arm64 ISO, needed only the first time: `run.sh`
-installs Windows into a VM once and reuses it after that.
+`--iso` is a Windows 11 ARM64 ISO from Microsoft, needed only the first time:
+`run.sh` installs Windows into a VM once and reuses it after that.
 
-Each is the app built above with job phases and a status footer added, and each
-runs on its own from your Mac:
+Each is the app built above, with job phases and a status footer added. Each
+can also be run by itself from your Mac:
 
 | | |
 |---|---|
