@@ -11,14 +11,6 @@
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
 [Run the examples](#run-the-examples)
 
-<table>
-<tr>
-<td align="center" width="33%"><a href="#macos-add-vero-to-your-own-macos-app"><img src="docs/screenshots/macos.gif" width="100%"></a><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
-<td align="center" width="33%"><a href="#windows-add-the-same-worker-to-a-windows-app"><img src="docs/screenshots/windows.gif" width="100%"></a><br><sub><b>Windows</b> — WPF</sub></td>
-<td align="center" width="33%"><a href="#linux-add-the-same-worker-to-a-linux-app"><img src="docs/screenshots/linux.gif" width="100%"></a><br><sub><b>Linux</b> — GTK4</sub></td>
-</tr>
-</table>
-
 ## Quickstart on macOS
 
 See all three running before building your own:
