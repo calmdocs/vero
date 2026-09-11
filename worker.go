@@ -39,6 +39,18 @@ type WorkerOptions struct {
 	// on the flag: vero registers it here so they cannot drift.
 	Version string
 
+	// State is everything the interface draws, as one value.  Set it and the
+	// worker pushes it whenever it changes - Serve starts the emitter and
+	// stops it - and a handler registered with Update replies with it.
+	//
+	// Leave it nil to emit by hand with Emit or EmitOnChange, for a worker
+	// whose events are not one snapshot.
+	State func() any
+
+	// StateInterval is how often State is sampled for a change.  Zero means
+	// DefaultStateInterval.
+	StateInterval time.Duration
+
 	// ShowVersion is set by RegisterFlags when -version was passed. Answer it
 	// and exit before anything else starts - it runs as its own short-lived
 	// process, several times per launch, and must not open a port, touch a
@@ -152,6 +164,10 @@ func (w *Worker) Emit(event any) {
 //
 //	go w.EmitOnChange(ctx, 250*time.Millisecond, func() any { return state() })
 //
+// Most workers do not call this: set WorkerOptions.State instead and Serve
+// runs it for you, on a context that ends when the interface does.  This is
+// for the ones whose events are not one state snapshot.
+//
 // Emitting on a timer instead is the obvious thing to write and it defeats the
 // point: an interface is sent the same thing several times a second, and the
 // quiet-when-nothing-happens property - the reason events are pushed rather
@@ -217,21 +233,31 @@ func (w *Worker) Run(h Handler) error {
 // Otherwise identical to Run: it blocks, it returns when the interface goes
 // away, and on its own it never returns.
 func (w *Worker) Serve(r *Router) error {
+	r.useState(w.opts.State)
 	return w.serveEnvelopes(func(ctx context.Context, e Envelope) (any, error) {
 		return r.route(ctx, e.Name, e.Payload)
 	})
 }
 
 func (w *Worker) serveEnvelopes(dispatch func(context.Context, Envelope) (any, error)) error {
-	if !w.serve {
-		select {} // nothing will ever send us a request
-	}
-
 	// Cancelled when standard input closes, which is how the interface says
 	// it has gone. Handlers that wait have to notice, or this process cannot
 	// leave with it.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Before the standalone check, so `worker -json` on its own emits too.
+	if w.opts.State != nil {
+		interval := w.opts.StateInterval
+		if interval <= 0 {
+			interval = DefaultStateInterval
+		}
+		go w.EmitOnChange(ctx, interval, w.opts.State)
+	}
+
+	if !w.serve {
+		select {} // nothing will ever send us a request
+	}
 
 	sc := bufio.NewScanner(w.in)
 	sc.Buffer(make([]byte, 0, 64<<10), MaxLineSize)

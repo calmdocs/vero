@@ -89,8 +89,9 @@ func snapshot() Status {
 }
 
 func main() {
-	ctx := context.Background()
-	w := vero.NewWorker(vero.WorkerOptions{})
+	// Everything the interface draws. vero pushes it whenever it changes, and
+	// an Update handler replies with it.
+	w := vero.NewWorker(vero.WorkerOptions{State: func() any { return snapshot() }})
 
 	// The actual work.  Yours goes here.
 	go func() {
@@ -105,24 +106,20 @@ func main() {
 		}
 	}()
 
-	// Push the state when it changes.  Not on a timer: an interface sent the
-	// same thing ten times a second is polling with extra steps.
-	go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
-
 	r := vero.NewRouter()
 
-	// Add a job.  The reply is the new state, so the interface cannot draw
-	// the list from before its own change.
-	vero.Handle(r, "addJob", func(_ context.Context, _ struct{}) (Status, error) {
+	// Add a job.  Update replies with the new state, so the interface cannot
+	// draw the list from before its own change.
+	vero.Update(r, "addJob", func(_ context.Context, _ struct{}) error {
 		mu.Lock()
 		n := len(jobs) + 1
 		jobs = append(jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
 		mu.Unlock()
-		return snapshot(), nil
+		return nil
 	})
 
 	// Send one back to the beginning.
-	vero.Handle(r, "restartJob", func(_ context.Context, req RestartJob) (Status, error) {
+	vero.Update(r, "restartJob", func(_ context.Context, req RestartJob) error {
 		mu.Lock()
 		for i := range jobs {
 			if jobs[i].ID == req.ID {
@@ -130,7 +127,7 @@ func main() {
 			}
 		}
 		mu.Unlock()
-		return snapshot(), nil
+		return nil
 	})
 
 	// Blocks until the interface goes away, then returns so this process can

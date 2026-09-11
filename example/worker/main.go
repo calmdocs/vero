@@ -79,6 +79,10 @@ func main() {
 	// to decide whether the copy on disk is older than the one it shipped.
 	opts.PrintVersionAndExit()
 
+	// Everything the interface draws.  Serve pushes it whenever it changes,
+	// and an Update handler replies with it.
+	opts.State = func() any { return snapshot() }
+
 	w := vero.NewWorker(opts)
 	if w.Supervised() {
 		w.Log("started by an interface")
@@ -86,15 +90,7 @@ func main() {
 		w.Log("running on its own; nothing is driving this")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	go work(w)
-
-	// Emit when the state changes, not on a timer. On a timer the interface
-	// is sent the same thing several times a second and the quiet-when-idle
-	// property is gone - which is the reason for pushing events at all.
-	go w.EmitOnChange(ctx, 100*time.Millisecond, func() any { return snapshot() })
 
 	// One handler per request, each with its own types, so neither side has to
 	// agree on a "type" field inside the message.
@@ -105,7 +101,7 @@ func main() {
 		return snapshot(), nil
 	})
 
-	vero.Handle(r, "restartJob", func(_ context.Context, req RestartJob) (Status, error) {
+	vero.Update(r, "restartJob", func(_ context.Context, req RestartJob) error {
 		return restart(req.ID)
 	})
 
@@ -133,7 +129,10 @@ func handle(ctx context.Context, request json.RawMessage) (any, error) {
 		return snapshot(), nil
 
 	case "restart":
-		return restart(r.ID)
+		if err := restart(r.ID); err != nil {
+			return nil, err
+		}
+		return snapshot(), nil
 
 	default:
 		return nil, fmt.Errorf("unknown request type: %q", r.Type)
@@ -181,7 +180,7 @@ func work(w *vero.Worker) {
 }
 
 // restart puts one job back to the beginning.
-func restart(id int) (Status, error) {
+func restart(id int) error {
 	mu.Lock()
 	found := false
 	for i := range jobs {
@@ -194,7 +193,7 @@ func restart(id int) (Status, error) {
 	if !found {
 		// The interface can show this. It is a bad request, not a broken
 		// worker, and those want different responses.
-		return Status{}, fmt.Errorf("no job with id %d", id)
+		return fmt.Errorf("no job with id %d", id)
 	}
-	return snapshot(), nil
+	return nil
 }

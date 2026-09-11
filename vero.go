@@ -57,6 +57,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Envelope is one line of the protocol.  Everything is optional except what
@@ -111,6 +112,11 @@ var ErrWorkerNotRunning = errors.New("vero: the worker is not running")
 type RemoteError struct{ Message string }
 
 func (e *RemoteError) Error() string { return "vero: worker refused the request: " + e.Message }
+
+// DefaultStateInterval is how often WorkerOptions.State is sampled for a
+// change when StateInterval is not set.  Fast enough that a progress bar moves
+// smoothly, slow enough that nothing is sent while nothing is happening.
+const DefaultStateInterval = 100 * time.Millisecond
 
 // MaxLineSize caps one protocol line, so a corrupt or hostile stream cannot
 // ask for an unbounded allocation.  Payloads larger than this belong in a file

@@ -22,7 +22,7 @@ import (
 //	vero.Handle(r, "getGroups", func(ctx context.Context, _ struct{}) ([]Group, error) {
 //	    return groups(), nil
 //	})
-//	vero.Handle(r, "addGroup", func(ctx context.Context, req AddGroup) (Group, error) {
+//	vero.Update(r, "addGroup", func(ctx context.Context, req AddGroup) error {
 //	    return add(req.Name)
 //	})
 //	w.Serve(r)
@@ -34,6 +34,15 @@ type Router struct {
 	routes   map[string]route
 	fallback Handler
 	fellBack atomic.Uint64
+	state    func() any // WorkerOptions.State, handed over by Serve
+}
+
+// useState is how Serve gives the router the worker's state function, so a
+// handler registered with Update has something to reply with.
+func (r *Router) useState(state func() any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.state = state
 }
 
 type route struct {
@@ -72,6 +81,27 @@ func Handle[Req any, Rep any](r *Router, name string, fn func(ctx context.Contex
 			return fn(ctx, request)
 		},
 	}
+}
+
+// Update registers a handler that changes the worker's state and replies with
+// it, so the interface cannot draw the state from before its own change.
+//
+// The reply is WorkerOptions.State, which Serve hands to the router, and the
+// handler itself returns only an error.  Use Handle when the reply is
+// something other than the state.
+func Update[Req any](r *Router, name string, fn func(ctx context.Context, request Req) error) {
+	Handle(r, name, func(ctx context.Context, request Req) (any, error) {
+		if err := fn(ctx, request); err != nil {
+			return nil, err
+		}
+		r.mu.RLock()
+		state := r.state
+		r.mu.RUnlock()
+		if state == nil {
+			return nil, fmt.Errorf("vero: %s replies with the state, but WorkerOptions.State is not set", name)
+		}
+		return state(), nil
+	})
 }
 
 // Fallback answers requests whose name matches nothing registered, including
