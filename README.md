@@ -2,7 +2,7 @@
 
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
-[Quickstart](#quickstart) ·
+[Quickstart on macOS](#quickstart-on-macos) ·
 [The go worker](#the-go-worker) ·
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
@@ -17,7 +17,7 @@
 </tr>
 </table>
 
-## Quickstart
+## Quickstart on macOS
 
 See all three running before building your own:
 
@@ -141,14 +141,13 @@ func main() {
 
 ## macOS: Add vero to your own macOS app
 
-Install Xcode from the App Store. It brings the Swift toolchain that steps 2
-and 3 use, and the `lipo` in step 1.
+Install Xcode from the App Store. Steps 2 and 3 happen in it, and it brings
+the `lipo` that step 1 uses.
 
 ### 1. Build the worker
 
-In the `worker` directory:
-
 ```bash
+cd ~/vero-example/worker
 GOOS=darwin GOARCH=amd64 go build -o worker-amd64 && \
 GOOS=darwin GOARCH=arm64 go build -o worker-arm64 && \
 lipo -create worker-amd64 worker-arm64 -output worker
@@ -156,45 +155,18 @@ lipo -create worker-amd64 worker-arm64 -output worker
 
 ### 2. The macOS SwiftUI app
 
-Make a package beside `worker`:
+In Xcode, File -> New -> Project -> macOS -> App, with Interface set to
+SwiftUI. Then:
 
-```bash
-mkdir -p ../mac-app/Sources/VeroExample && cd ../mac-app
-```
+- File -> Add Package Dependencies... -> `https://github.com/calmdocs/vero`
+- drag `~/vero-example/worker/worker` into the project, ticking your app under
+  **Add to targets**
 
-`Package.swift`:
-
-```swift
-// swift-tools-version:5.9
-import PackageDescription
-
-let package = Package(
-    name: "VeroExample",
-    platforms: [.macOS(.v13)],
-    dependencies: [
-        .package(url: "https://github.com/calmdocs/vero", from: "0.2.0")
-    ],
-    targets: [
-        .executableTarget(
-            name: "VeroExample",
-            dependencies: [.product(name: "Vero", package: "vero")]
-        )
-    ]
-)
-```
-
-`Sources/VeroExample/VeroExample.swift`:
+Replace `ContentView.swift` with this:
 
 ```swift
 import SwiftUI
 import Vero
-
-@main
-struct VeroExampleApp: App {
-    var body: some Scene {
-        WindowGroup { ContentView() }
-    }
-}
 
 // The same two types, and the same request names, as the worker.
 struct Job: Decodable, Identifiable {
@@ -254,25 +226,11 @@ struct ContentView: View {
 }
 ```
 
-To add vero to an Xcode application instead of this package: File -> Add
-Package Dependencies... -> `https://github.com/calmdocs/vero`, and drag
-`worker/worker` in with your app ticked under **Add to targets**. Paste the
-code above into `ContentView.swift`, leaving out `struct VeroExampleApp`: an
-Xcode project already has a `@main` App of its own, and two will not compile.
-
 ### 3. Run it
 
-The worker has to sit beside the executable, which is where vero looks when the
-app is not in a bundle:
-
-```bash
-swift build
-cp ../worker/worker .build/debug/worker
-./.build/debug/VeroExample
-```
-
-Two jobs appear and their progress climbs. **Add job** puts a third in the
-list. The refresh button beside a job sets that job's progress back to zero.
+Press Cmd-R. Two jobs appear and their progress climbs. **Add job** puts a
+third in the list. The refresh button beside a job sets that job's progress
+back to zero.
 
 ## Windows: Add the same worker to a Windows app
 
@@ -293,9 +251,8 @@ mv llvm-mingw-*-ucrt-macos-universal llvm-mingw
 
 ### 1. Build the worker and the library
 
-In the `worker` directory:
-
 ```bash
+cd ~/vero-example/worker
 CGO_ENABLED=1 GOOS=windows GOARCH=arm64 \
     CC=$HOME/toolchains/llvm-mingw/bin/aarch64-w64-mingw32-clang \
     go build -buildmode=c-shared -o vero.dll github.com/calmdocs/vero/cshim
@@ -474,9 +431,8 @@ brew install colima docker && colima start
 
 ### 1. Build the worker and the library
 
-Run these in the `worker` directory:
-
 ```bash
+cd ~/vero-example/worker
 docker run --rm -v "$PWD":/src -w /src \
     -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/go -e GOTOOLCHAIN=auto \
     golang:1.24-bookworm \
