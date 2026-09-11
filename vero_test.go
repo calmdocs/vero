@@ -52,7 +52,9 @@ func testWorker() {
 		return map[string]int64{"tick": atomic.AddInt64(&counter, 1)}
 	})
 
-	w.Run(func(ctx context.Context, req json.RawMessage) (any, error) {
+	// No named handlers: everything arrives at the fallback, which is what an
+	// interface that predates named requests sends.
+	w.Fallback(func(ctx context.Context, req json.RawMessage) (any, error) {
 		var r request
 		if err := json.Unmarshal(req, &r); err != nil {
 			return nil, err
@@ -93,6 +95,7 @@ func testWorker() {
 			return nil, fmt.Errorf("unknown request type: %q", r.Type)
 		}
 	})
+	w.Serve()
 	os.Exit(0)
 }
 

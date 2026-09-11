@@ -145,13 +145,9 @@ func NewWorker(opts WorkerOptions) *Worker {
 // exiting, say, rather than running forever.
 func (w *Worker) Supervised() bool { return w.serve }
 
-// Emit sends an event to whoever is listening.  When nothing is - a daemon
+// emit sends an event to whoever is listening.  When nothing is - a daemon
 // running with no interface and no -json - it costs a comparison and returns.
-//
-// Call it whenever state moves.  That is what lets an interface show progress
-// without polling: there is no timer to tune and nothing is sent while the
-// worker is quiet.
-func (w *Worker) Emit(event any) {
+func (w *Worker) emit(event any) {
 	if w.enc == nil {
 		return
 	}
@@ -198,7 +194,7 @@ func (w *Worker) EmitOnChange(ctx context.Context, interval time.Duration, snaps
 		}
 		first = false
 		last = current
-		w.Emit(current)
+		w.emit(current)
 	}
 }
 
@@ -251,19 +247,6 @@ func (w *Worker) write(e Envelope) {
 	}
 }
 
-// Run answers requests until the other end goes away, then returns nil.
-//
-// When no supervisor launched this worker there is nothing to answer, so Run
-// blocks forever and the worker just works.  When one did, standard input
-// closing means the interface has quit - or crashed, or been force quit - and
-// Run returns so the process can exit with it.  That is the whole of the
-// lifecycle: no PID file, no heartbeat, no orphan.
-func (w *Worker) Run(h Handler) error {
-	return w.serveEnvelopes(func(ctx context.Context, e Envelope) (any, error) {
-		return h(ctx, e.Payload)
-	})
-}
-
 // Serve answers the requests registered with Handle and Update.
 //
 // Otherwise identical to Run: it blocks, it returns when the interface goes
@@ -281,9 +264,6 @@ func (w *Worker) Fallback(h Handler) { w.router.Fallback(h) }
 // FallbackCalls counts the requests that have reached the fallback, so an
 // application can tell when the old shape has stopped being used.
 func (w *Worker) FallbackCalls() uint64 { return w.router.FallbackCalls() }
-
-// Names lists the registered request names.
-func (w *Worker) Names() []string { return w.router.Names() }
 
 func (w *Worker) serveEnvelopes(dispatch func(context.Context, Envelope) (any, error)) error {
 	// w.ctx is cancelled when standard input closes, which is how the

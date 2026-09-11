@@ -149,7 +149,7 @@ func handle(state *vero.State[Status]) vero.Handler {
 
 // version is what -version reports. An interface compares it with the copy it
 // has on disk, so it has to increase on every release.
-var version = "0.6.0"
+var version = "0.7.0"
 
 // work is the pretend business logic: it moves jobs along and says so.
 func work(w *vero.Worker, state *vero.State[Status]) {

@@ -143,23 +143,8 @@ type Keyed[K comparable] interface {
 	Key() K
 }
 
-// Find returns the item the interface means, or an error to show.
-//
-//	func (j Job) Key() int { return j.ID }
-//
-//	func (s *Status) Pause(req vero.ID[int]) error {
-//	    job, err := vero.Find(s.Jobs, req.ID)
-//	    if err != nil {
-//	        return err
-//	    }
-//	    job.Paused = !job.Paused
-//	    return nil
-//	}
-//
-// The pointer is into the slice, so writing through it changes the state, and
-// the error is the one an interface should show: a bad request, not a broken
-// worker.
-func Find[T Keyed[K], K comparable](items []T, key K) (*T, error) {
+// find returns the item the interface means, or an error to show.
+func find[T Keyed[K], K comparable](items []T, key K) (*T, error) {
 	for i := range items {
 		if items[i].Key() == key {
 			return &items[i], nil
@@ -175,10 +160,10 @@ func Find[T Keyed[K], K comparable](items []T, key K) (*T, error) {
 //	    return vero.Edit(s.Jobs, req.ID, func(j *Job) { j.Paused = !j.Paused })
 //	}
 //
-// The error is Find's, so a request naming something that is gone is refused
-// and the worker carries on.
+// A request naming something that is gone is refused, and the worker carries
+// on.
 func Edit[T Keyed[K], K comparable](items []T, key K, change func(*T)) error {
-	item, err := Find(items, key)
+	item, err := find(items, key)
 	if err != nil {
 		return err
 	}
@@ -204,7 +189,7 @@ func Edit[T Keyed[K], K comparable](items []T, key K, change func(*T)) error {
 func (s *State[T]) UpdateItem[J Keyed[K], K comparable](name string, change func(*J) error) {
 	field := itemsField[T, J]()
 	s.UpdateWith(name, func(state *T, req ID[K]) error {
-		item, err := Find(field(state), req.ID)
+		item, err := find(field(state), req.ID)
 		if err != nil {
 			return err
 		}
