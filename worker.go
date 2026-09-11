@@ -2,6 +2,7 @@ package vero
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -39,16 +40,8 @@ type WorkerOptions struct {
 	// on the flag: vero registers it here so they cannot drift.
 	Version string
 
-	// State is everything the interface draws, as one value.  Set it and the
-	// worker pushes it whenever it changes - Serve starts the emitter and
-	// stops it - and a handler registered with Update replies with it.
-	//
-	// Leave it nil to emit by hand with Emit or EmitOnChange, for a worker
-	// whose events are not one snapshot.
-	State func() any
-
-	// StateInterval is how often State is sampled for a change.  Zero means
-	// DefaultStateInterval.
+	// StateInterval is how often the state is sampled for a change, for a
+	// worker that has one.  Zero means DefaultStateInterval.
 	StateInterval time.Duration
 
 	// ShowVersion is set by RegisterFlags when -version was passed. Answer it
@@ -90,6 +83,12 @@ type Worker struct {
 	opts   WorkerOptions
 	serve  bool // a supervisor launched us, so stdin carries requests
 	router *router
+	state  state // set by NewState; nil for a worker that emits by hand
+
+	// Cancelled when the interface goes away, so everything this worker
+	// started - the state emitter, an Every loop - stops with it.
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	in  io.Reader
 	out io.Writer
@@ -119,9 +118,12 @@ type Worker struct {
 // anything else could be printing: another goroutine writing while this
 // reassigns is a data race, and one the race detector will find.
 func NewWorker(opts WorkerOptions) *Worker {
+	ctx, cancel := context.WithCancel(context.Background())
 	w := &Worker{
 		opts:   opts,
 		router: newRouter(),
+		ctx:    ctx,
+		cancel: cancel,
 		serve:  os.Getenv(envServe) != "",
 		in:     os.Stdin,
 		out:    os.Stdout,
@@ -200,6 +202,38 @@ func (w *Worker) EmitOnChange(ctx context.Context, interval time.Duration, snaps
 	}
 }
 
+// emitState sends the state whenever its encoding differs from the last one
+// sent.  Comparing the encoding rather than the value is what lets the state
+// be read under its own lock: there is no copy handed out to go stale, and a
+// change made while this is encoding waits for the next tick rather than
+// producing half of one.
+func (w *Worker) emitState(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var last []byte
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		current, err := w.state.encode()
+		if err != nil {
+			w.Log("cannot encode the state: %v", err)
+			continue
+		}
+		if bytes.Equal(current, last) {
+			continue
+		}
+		last = current
+		if w.enc != nil {
+			w.write(Envelope{Kind: kindEvent, Payload: current})
+		}
+	}
+}
+
 // Log writes a line to standard error, where logs belong.  Standard output is
 // reserved for the protocol, and a stray write there corrupts the stream.
 func (w *Worker) Log(format string, a ...any) {
@@ -252,19 +286,19 @@ func (w *Worker) FallbackCalls() uint64 { return w.router.FallbackCalls() }
 func (w *Worker) Names() []string { return w.router.Names() }
 
 func (w *Worker) serveEnvelopes(dispatch func(context.Context, Envelope) (any, error)) error {
-	// Cancelled when standard input closes, which is how the interface says
-	// it has gone. Handlers that wait have to notice, or this process cannot
-	// leave with it.
-	ctx, cancel := context.WithCancel(context.Background())
+	// w.ctx is cancelled when standard input closes, which is how the
+	// interface says it has gone. Handlers that wait have to notice, or this
+	// process cannot leave with it.
+	ctx, cancel := w.ctx, w.cancel
 	defer cancel()
 
 	// Before the standalone check, so `worker -json` on its own emits too.
-	if w.opts.State != nil {
+	if w.state != nil {
 		interval := w.opts.StateInterval
 		if interval <= 0 {
 			interval = DefaultStateInterval
 		}
-		go w.EmitOnChange(ctx, interval, w.opts.State)
+		go w.emitState(ctx, interval)
 	}
 
 	if !w.serve {

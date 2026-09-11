@@ -1,3 +1,3 @@
 module github.com/calmdocs/vero
 
-go 1.21
+go 1.27

@@ -52,99 +52,56 @@ go get github.com/calmdocs/vero
 package main
 
 import (
-	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/calmdocs/vero"
 )
 
-// What the interface draws.
+// The contract with the interface.
 type Job struct {
-	ID       int    `json:"id"`
+	vero.WithID[int]
 	Name     string `json:"name"`
 	Progress int    `json:"progress"`
+	Paused   bool   `json:"paused"`
 }
 
 type Status struct {
 	Jobs []Job `json:"jobs"`
 }
 
-// What the interface asks for.  The name each is registered under is what
-// routes it, and Swift names the same string.
-type RestartJob struct {
-	ID int `json:"id"`
-}
-
-// The jobs, and the lock that guards them.  Nothing else touches the slice.
-type store struct {
-	mu   sync.Mutex
-	jobs []Job
-}
-
-// status is a copy, so what the interface is sent cannot change underneath it.
-func (s *store) status() Status {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return Status{Jobs: append([]Job(nil), s.jobs...)}
-}
-
-func (s *store) add() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n := len(s.jobs) + 1
-	s.jobs = append(s.jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
-}
-
-func (s *store) restart(id int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := range s.jobs {
-		if s.jobs[i].ID == id {
-			s.jobs[i].Progress = 0
-		}
-	}
-}
-
-// The actual work.  Yours goes here.
-func (s *store) advance() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := range s.jobs {
-		if s.jobs[i].Progress < 100 {
-			s.jobs[i].Progress++
-		}
-	}
-}
-
 func main() {
-	jobs := &store{jobs: []Job{{ID: 1, Name: "Photos"}, {ID: 2, Name: "Documents"}}}
+	w := vero.NewWorker(vero.WorkerOptions{})
+	jobs := w.NewState(Status{Jobs: []Job{
+		{ID: 1, Name: "Photos"},
+		{ID: 2, Name: "Documents"},
+	}})
 
-	// Everything the interface draws. vero pushes it whenever it changes, and
-	// an Update handler replies with it.
-	w := vero.NewWorker(vero.WorkerOptions{State: func() any { return jobs.status() }})
-
-	go func() {
-		for range time.Tick(200 * time.Millisecond) {
-			jobs.advance()
+	// The actual work.  Yours goes here.
+	jobs.Every(200*time.Millisecond, func(s *Status) {
+		for i := range s.Jobs {
+			if !s.Jobs[i].Paused && s.Jobs[i].Progress < 100 {
+				s.Jobs[i].Progress++
+			}
 		}
-	}()
+	})
 
-	// Update replies with the new state, so the interface cannot draw the
-	// list from before its own change.
-	vero.Update(w, "addJob", func(context.Context, struct{}) error {
-		jobs.add()
+	jobs.Act("addJob", func(s *Status) error {
+		n := len(s.Jobs) + 1
+		s.Jobs = append(s.Jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
 		return nil
 	})
 
-	vero.Update(w, "restartJob", func(_ context.Context, req RestartJob) error {
-		jobs.restart(req.ID)
+	vero.EditItem(jobs, "restartJob", func(j *Job) error {
+		j.Progress = 0
 		return nil
 	})
 
-	// Blocks until the interface goes away, then returns so this process can
-	// leave with it.
+	vero.EditItem(jobs, "pauseJob", func(j *Job) error {
+		j.Paused = !j.Paused
+		return nil
+	})
+
 	w.Serve()
 }
 ```
@@ -183,6 +140,7 @@ struct Job: Decodable, Identifiable {
     let id: Int
     let name: String
     let progress: Int
+    let paused: Bool
 }
 
 struct Status: Decodable {
@@ -196,6 +154,12 @@ struct AddJob: NamedRequest {
 
 struct RestartJob: NamedRequest {
     static let name = "restartJob"
+    typealias Reply = Status
+    let id: Int
+}
+
+struct PauseJob: NamedRequest {
+    static let name = "pauseJob"
     typealias Reply = Status
     let id: Int
 }
@@ -226,6 +190,11 @@ struct ContentView: View {
                     }
                     .disabled(vero.isBusy)
 
+                    Button { vero.call(PauseJob(id: job.id)) } label: {
+                        Image(systemName: job.paused ? "play.fill" : "pause.fill")
+                    }
+                    .disabled(vero.isBusy)
+
                     Text(job.name)
                     ProgressView(value: Double(job.progress) / 100)
                 }
@@ -238,9 +207,9 @@ struct ContentView: View {
 
 ### 3. Run it
 
-Press Cmd-R. Two jobs appear and their progress climbs. **Add job** puts a
-third in the list. The refresh button beside a job sets that job's progress
-back to zero.
+Press Cmd-R. Two jobs appear and their progress climbs. **Add job** puts a third
+in the list. Beside each job, the refresh button sets its progress back
+to zero and the pause button stops and starts it.
 
 ## Windows: Add the same worker to a Windows app
 
@@ -318,6 +287,7 @@ Add these four files to the same directory:
                 <DataTemplate>
                     <DockPanel Margin="0,4">
                         <Button Content="&#x21bb;" Tag="{Binding Id}" Click="Restart_Click"/>
+                        <Button Content="&#x23f8;" Tag="{Binding Id}" Click="Pause_Click" Margin="4,0,0,0"/>
                         <TextBlock Text="{Binding Name}" Width="90" Margin="8,0"/>
                         <ProgressBar Value="{Binding Progress}" Maximum="100" Height="12"/>
                     </DockPanel>
@@ -346,7 +316,8 @@ namespace VeroExample;
 public record Job(
     [property: JsonPropertyName("id")]       int Id,
     [property: JsonPropertyName("name")]     string Name,
-    [property: JsonPropertyName("progress")] int Progress);
+    [property: JsonPropertyName("progress")] int Progress,
+    [property: JsonPropertyName("paused")]   bool Paused);
 
 public record Status(
     [property: JsonPropertyName("jobs")] Job[] Jobs);
@@ -391,6 +362,9 @@ public partial class MainWindow : Window
 
     private async void Restart_Click(object sender, RoutedEventArgs e) =>
         await _vero.CallAsync("restartJob", new { id = (int)((Button)sender).Tag });
+
+    private async void Pause_Click(object sender, RoutedEventArgs e) =>
+        await _vero.CallAsync("pauseJob", new { id = (int)((Button)sender).Tag });
 }
 ```
 
@@ -425,8 +399,8 @@ vero/scripts/run-windows.sh --payload out
 Windows opens in a window on your Mac, which you use like any other. In it,
 copy the `vero` folder from the CD drive to `C:\`, and run `VeroExample.exe`
 inside it. Two jobs appear and their progress climbs. **Add job** puts a third
-in the list. The refresh button beside a job sets that job's progress back to
-zero.
+in the list. Beside each job, the refresh button sets its progress back
+to zero and the pause button stops and starts it.
 
 ## Linux: Add the same worker to a Linux app
 
@@ -506,7 +480,10 @@ class Window(Gtk.ApplicationWindow):
         for job in status["jobs"]:
             if job["id"] not in self.bars:
                 self.bars[job["id"]] = self.add_row(job)
-            self.bars[job["id"]].set_fraction(job["progress"] / 100)
+            bar, pause = self.bars[job["id"]]
+            bar.set_fraction(job["progress"] / 100)
+            pause.set_icon_name("media-playback-start-symbolic" if job["paused"]
+                                else "media-playback-pause-symbolic")
         return False  # GLib.idle_add: run once
 
     def add_row(self, job):
@@ -514,13 +491,17 @@ class Window(Gtk.ApplicationWindow):
         restart = Gtk.Button(icon_name="view-refresh-symbolic")
         restart.connect(
             "clicked", lambda _, i=job["id"]: self.vero.call("restartJob", {"id": i}))
+        pause = Gtk.Button(icon_name="media-playback-pause-symbolic")
+        pause.connect(
+            "clicked", lambda _, i=job["id"]: self.vero.call("pauseJob", {"id": i}))
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         row.append(restart)
+        row.append(pause)
         row.append(Gtk.Label(label=job["name"], width_chars=10, xalign=0))
         row.append(bar)
         self.rows.append(row)
-        return bar
+        return bar, pause
 
 
 app = Gtk.Application(application_id="com.example.vero")
@@ -559,8 +540,9 @@ docker run --rm -p 5901:5900 -v "$PWD":/app -w /app vero-gtk sh -c '
 open vnc://localhost:5901
 ```
 
-Two jobs appear and their progress climbs. **Add job** puts a third in the
-list. The refresh button beside a job sets that job's progress back to zero.
+Two jobs appear and their progress climbs. **Add job** puts a third
+in the list. Beside each job, the refresh button sets its progress back
+to zero and the pause button stops and starts it.
 
 ## Run the examples
 

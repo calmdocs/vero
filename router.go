@@ -44,15 +44,12 @@ func newRouter() *router {
 	return &router{routes: map[string]route{}}
 }
 
-// Handle registers a handler for one request name.
+// Handle answers one request name.
 //
 // Req is what the request decodes into and Rep is what the reply is encoded
 // from, so neither the handler nor the caller has to guess. Use struct{} for a
 // request that carries nothing.
-//
-// It is a function rather than a method because Go does not allow methods to
-// introduce type parameters.
-func Handle[Req any, Rep any](w *Worker, name string, fn func(ctx context.Context, request Req) (Rep, error)) {
+func (w *Worker) Handle[Req any, Rep any](name string, fn func(ctx context.Context, request Req) (Rep, error)) {
 	r := w.router
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -71,24 +68,6 @@ func Handle[Req any, Rep any](w *Worker, name string, fn func(ctx context.Contex
 			return fn(ctx, request)
 		},
 	}
-}
-
-// Update registers a handler that changes the worker's state and replies with
-// it, so the interface cannot draw the state from before its own change.
-//
-// The reply is WorkerOptions.State, which Serve hands to the router, and the
-// handler itself returns only an error.  Use Handle when the reply is
-// something other than the state.
-func Update[Req any](w *Worker, name string, fn func(ctx context.Context, request Req) error) {
-	Handle(w, name, func(ctx context.Context, request Req) (any, error) {
-		if err := fn(ctx, request); err != nil {
-			return nil, err
-		}
-		if w.opts.State == nil {
-			return nil, fmt.Errorf("vero: %s replies with the state, but WorkerOptions.State is not set", name)
-		}
-		return w.opts.State(), nil
-	})
 }
 
 // Fallback answers requests whose name matches nothing registered, including

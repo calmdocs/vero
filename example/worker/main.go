@@ -17,17 +17,22 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"sync"
 	"time"
 
 	"github.com/calmdocs/vero"
 )
 
 type Job struct {
-	ID       int    `json:"id"`
+	vero.WithID[int]
 	Name     string `json:"name"`
 	Phase    string `json:"phase"`
 	Progress int    `json:"progress"`
+}
+
+// Restart puts one job back to the beginning.  A method on the job, because
+// that is what the button on its row means.
+func (j *Job) Restart() {
+	j.Phase, j.Progress = "waiting", 0
 }
 
 type Status struct {
@@ -36,37 +41,22 @@ type Status struct {
 	Since   string `json:"since"`
 }
 
-// RestartJob is what the "restartJob" handler takes.  A named handler needs no
-// "type" field: the name it is registered under is the routing.
-type RestartJob struct {
-	ID int `json:"id"`
-}
-
 type Request struct {
 	Type string `json:"type"`
 	ID   int    `json:"id"`
 }
 
-var (
-	mu   sync.Mutex
-	jobs = []Job{
-		{ID: 1, Name: "Photos", Phase: "waiting"},
-		{ID: 2, Name: "Documents", Phase: "waiting"},
-		{ID: 3, Name: "Team share", Phase: "waiting"},
-	}
-	started = time.Now()
-)
+var started = time.Now()
 
-func snapshot() Status {
-	mu.Lock()
-	defer mu.Unlock()
-	out := Status{Jobs: append([]Job{}, jobs...), Since: started.Format("15:04:05")}
-	for _, j := range jobs {
+// working is true while any job is mid-flight.  Derived rather than stored, so
+// it is recomputed wherever the jobs change.
+func working(s *Status) {
+	s.Working = false
+	for _, j := range s.Jobs {
 		if j.Phase != "waiting" && j.Phase != "done" {
-			out.Working = true
+			s.Working = true
 		}
 	}
-	return out
 }
 
 func main() {
@@ -79,34 +69,52 @@ func main() {
 	// to decide whether the copy on disk is older than the one it shipped.
 	opts.PrintVersionAndExit()
 
-	// Everything the interface draws.  Serve pushes it whenever it changes,
-	// and an Update handler replies with it.
-	opts.State = func() any { return snapshot() }
-
 	w := vero.NewWorker(opts)
+
+	// Everything the interface draws.  The worker pushes it whenever it
+	// changes, and every reply below is it.
+	state := w.NewState(Status{
+		Jobs: []Job{
+			{ID: 1, Name: "Photos", Phase: "waiting"},
+			{ID: 2, Name: "Documents", Phase: "waiting"},
+			{ID: 3, Name: "Team share", Phase: "waiting"},
+		},
+		Since: started.Format("15:04:05"),
+	})
+
 	if w.Supervised() {
 		w.Log("started by an interface")
 	} else {
 		w.Log("running on its own; nothing is driving this")
 	}
 
-	go work(w)
+	go work(w, state)
 
-	// One handler per request, each with its own types, so neither side has to
-	// agree on a "type" field inside the message.
-	vero.Handle(w, "status", func(context.Context, struct{}) (Status, error) {
-		// Something opened a window and needs to draw it now.
-		return snapshot(), nil
-	})
+	// One handler per request.  The name each is registered under is the
+	// routing, so neither side needs a "type" field inside the message.
 
-	vero.Update(w, "restartJob", func(_ context.Context, req RestartJob) error {
-		return restart(req.ID)
+	// Something opened a window and needs to draw it now: no change, and the
+	// reply is the state.
+	state.Act("status", func(*Status) error { return nil })
+
+	// The button on a row names one job.  Update rather than EditItem, because
+	// Working is derived from every job and has to be recomputed after the
+	// change.  A request naming a job that is gone is refused, and the worker
+	// carries on: a bad request and a broken worker want different responses.
+	state.Update("restartJob", func(s *Status, req vero.ID[int]) error {
+		if err := vero.Edit(s.Jobs, req.ID, (*Job).Restart); err != nil {
+			// vero says "no item"; an interface should hear what this
+			// application calls the thing.
+			return fmt.Errorf("no job with id %d", req.ID)
+		}
+		working(s)
+		return nil
 	})
 
 	// An interface that has not moved to named handlers keeps working: this
 	// takes anything the router has no name for.  w.FallbackCalls() reports
 	// when it has stopped being used and can go.
-	w.Fallback(handle)
+	w.Fallback(handle(state))
 
 	// Serve blocks. Under an interface it answers requests until that
 	// interface quits; on its own it simply never returns.
@@ -116,59 +124,63 @@ func main() {
 	w.Log("the interface has gone; stopping")
 }
 
-func handle(ctx context.Context, request json.RawMessage) (any, error) {
-	var r Request
-	if err := json.Unmarshal(request, &r); err != nil {
-		return nil, err
-	}
-	switch r.Type {
-	case "status":
-		// Something opened a window and needs to draw it now.
-		return snapshot(), nil
-
-	case "restart":
-		if err := restart(r.ID); err != nil {
+func handle(state *vero.State[Status]) vero.Handler {
+	return func(ctx context.Context, request json.RawMessage) (any, error) {
+		var r Request
+		if err := json.Unmarshal(request, &r); err != nil {
 			return nil, err
 		}
-		return snapshot(), nil
+		switch r.Type {
+		case "status":
+			// Something opened a window and needs to draw it now.
+			return state.JSON()
 
-	default:
-		return nil, fmt.Errorf("unknown request type: %q", r.Type)
+		case "restart":
+			if err := restart(state, r.ID); err != nil {
+				return nil, err
+			}
+			return state.JSON()
+
+		default:
+			return nil, fmt.Errorf("unknown request type: %q", r.Type)
+		}
 	}
 }
 
 // version is what -version reports. An interface compares it with the copy it
 // has on disk, so it has to increase on every release.
-var version = "0.4.0"
+var version = "0.5.0"
 
 // work is the pretend business logic: it moves jobs along and says so.
-func work(w *vero.Worker) {
+func work(w *vero.Worker, state *vero.State[Status]) {
 	phases := []string{"looking for changes", "scanning", "uploading", "done"}
 	for {
 		time.Sleep(time.Duration(200+rand.Intn(400)) * time.Millisecond)
 
-		mu.Lock()
-		j := &jobs[rand.Intn(len(jobs))]
-		before := j.Phase
-		switch {
-		case j.Phase == "waiting" || j.Phase == "done":
-			j.Phase, j.Progress = phases[0], 0
-		case j.Progress >= 100:
-			for i, p := range phases {
-				if p == j.Phase && i+1 < len(phases) {
-					j.Phase, j.Progress = phases[i+1], 0
+		var name, phase, before string
+		state.Do(func(s *Status) {
+			j := &s.Jobs[rand.Intn(len(s.Jobs))]
+			before = j.Phase
+			switch {
+			case j.Phase == "waiting" || j.Phase == "done":
+				j.Phase, j.Progress = phases[0], 0
+			case j.Progress >= 100:
+				for i, p := range phases {
+					if p == j.Phase && i+1 < len(phases) {
+						j.Phase, j.Progress = phases[i+1], 0
+					}
+				}
+			default:
+				j.Progress += 20 + rand.Intn(30)
+				if j.Progress > 100 {
+					j.Progress = 100
 				}
 			}
-		default:
-			j.Progress += 20 + rand.Intn(30)
-			if j.Progress > 100 {
-				j.Progress = 100
-			}
-		}
-		name, phase := j.Name, j.Phase
-		mu.Unlock()
+			name, phase = j.Name, j.Phase
+			working(s)
+		})
 
-		// Nothing emits here: EmitOnChange notices. The log is a separate
+		// Nothing emits here: the worker notices. The log is a separate
 		// question - format and volume are not the same thing, and a person
 		// wants the phase changes, not every percent.
 		if phase != before {
@@ -177,21 +189,16 @@ func work(w *vero.Worker) {
 	}
 }
 
-// restart puts one job back to the beginning.
-func restart(id int) error {
-	mu.Lock()
-	found := false
-	for i := range jobs {
-		if jobs[i].ID == id {
-			jobs[i].Phase, jobs[i].Progress = "waiting", 0
-			found = true
+// restart puts one job back to the beginning, for the old unnamed requests
+// the fallback still answers.
+func restart(state *vero.State[Status], id int) error {
+	var err error
+	state.Do(func(s *Status) {
+		if err = vero.Edit(s.Jobs, id, (*Job).Restart); err != nil {
+			err = fmt.Errorf("no job with id %d", id)
+			return
 		}
-	}
-	mu.Unlock()
-	if !found {
-		// The interface can show this. It is a bad request, not a broken
-		// worker, and those want different responses.
-		return fmt.Errorf("no job with id %d", id)
-	}
-	return nil
+		working(s)
+	})
+	return err
 }

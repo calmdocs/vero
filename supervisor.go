@@ -36,7 +36,7 @@ type SupervisorOptions struct {
 	OnLog func(line string)
 
 	// OnStateChange is told when the worker starts, dies, or is given up on.
-	OnStateChange func(State)
+	OnStateChange func(RunState)
 
 	// Backoff is the wait before the first restart, doubling up to
 	// MaxBackoff.  A worker that crashes on startup would otherwise be
@@ -55,12 +55,14 @@ type SupervisorOptions struct {
 	NoLock bool
 }
 
-// State is what the supervisor last saw the worker doing.
-type State int
+// RunState is what the supervisor last saw the worker doing.  It is the
+// worker's lifecycle, not the state it publishes: that is Worker.NewState on
+// the other side of the pipe.
+type RunState int
 
 const (
 	// Starting means a worker is being launched, including a restart.
-	Starting State = iota
+	Starting RunState = iota
 	// Running means a worker is up and answering.
 	Running
 	// Restarting means one died and another is on the way.
@@ -69,7 +71,7 @@ const (
 	Stopped
 )
 
-func (s State) String() string {
+func (s RunState) String() string {
 	switch s {
 	case Starting:
 		return "starting"
@@ -88,7 +90,7 @@ type Supervisor struct {
 	opts SupervisorOptions
 
 	mu      sync.Mutex
-	state   State
+	state   RunState
 	stdin   io.WriteCloser
 	enc     *json.Encoder
 	nextID  uint64
@@ -149,7 +151,7 @@ func (s *Supervisor) Err() error {
 }
 
 // State reports what the worker is doing now.
-func (s *Supervisor) State() State {
+func (s *Supervisor) State() RunState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.state
@@ -254,7 +256,7 @@ func (s *Supervisor) Stop() error {
 	return nil
 }
 
-func (s *Supervisor) setState(st State) {
+func (s *Supervisor) setState(st RunState) {
 	s.mu.Lock()
 	s.state = st
 	s.mu.Unlock()
