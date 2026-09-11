@@ -3,7 +3,7 @@
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
 [Quickstart](#quickstart) ·
-[The worker](#the-worker) ·
+[The go worker](#the-go-worker) ·
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
@@ -34,7 +34,7 @@ bit of time and happens once: after that `./scripts/run.sh` on its own opens
 all three, and the ISO can be deleted. Without one, macOS and Linux still open
 and Windows is skipped.
 
-## The worker
+## The go worker
 
 All three apps below run this same Go program. Each section builds it for its
 own platform.
