@@ -511,7 +511,7 @@ list, and the arrow beside a job sends it back to the beginning.
 [example/gtk-app](example/gtk-app) is the same app, styled.
 `./scripts/run-linux.sh` runs it this way in one command.
 
-## Run all three
+## Set up and run all three apps in three lines
 
 ```bash
 git clone https://github.com/calmdocs/vero && cd vero
