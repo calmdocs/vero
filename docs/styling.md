@@ -2,8 +2,7 @@
 
 The examples in this repository use stock controls, with no styling applied.
 
-This page shows the same three examples with a design on top, and the code that
-does it.
+This page shows the same three examples styled, and the code that does it.
 
 ## Before and after
 

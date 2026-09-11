@@ -366,8 +366,8 @@ and their progress climbs. **Add job** puts a third in the list, and the arrow
 beside a job sends it back to the beginning.
 
 No Windows machine? `./scripts/run-windows.sh` boots one in a VM on your Mac
-with this build on a disc. [example/wpf-app](example/wpf-app) is the same app
-with a design on it.
+with this build on a disc. [example/wpf-app](example/wpf-app) is the same app,
+styled.
 
 ## Add the same worker to a Linux app
 
@@ -508,7 +508,7 @@ open vnc://localhost:5901
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-[example/gtk-app](example/gtk-app) is the same app with a design on it, and
+[example/gtk-app](example/gtk-app) is the same app, styled.
 `./scripts/run-linux.sh` runs it this way in one command.
 
 ## Run all three
@@ -530,7 +530,7 @@ installs Windows into a VM once and reuses it after that.
 | [docs/building.md](docs/building.md) | every build command, and what each script does |
 | [docs/design.md](docs/design.md) | what runs where, and why pipes |
 | [docs/protocol.md](docs/protocol.md) | wire format, errors, the single-worker lock |
-| [docs/styling.md](docs/styling.md) | the same examples with a design on them |
+| [docs/styling.md](docs/styling.md) | the same examples, styled |
 
 ## Tests
 
