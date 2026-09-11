@@ -6,8 +6,7 @@
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
-[Examples](#the-examples-in-this-repository) ·
-[Tests](#tests)
+[Examples](#the-examples-in-this-repository)
 
 <table>
 <tr>
@@ -23,6 +22,7 @@ All three platforms drive this same Go program. Each section below builds it
 for its own platform.
 
 ```bash
+brew install go
 mkdir worker && cd worker
 go mod init worker
 go get github.com/calmdocs/vero
@@ -123,6 +123,9 @@ func main() {
 
 ## macOS: Add vero to your own macOS app
 
+Install Xcode from the App Store once. Step 1 needs its `lipo`, and step 2 is
+built in it.
+
 ### 1. Build the worker
 
 In the `worker` directory:
@@ -215,12 +218,16 @@ back to zero.
 
 Every step below runs on your Mac. Only step 4 needs Windows, on ARM.
 
-Install these once:
+Install these once, the .NET SDK and a Windows ARM64 C compiler:
 
-| | |
-|---|---|
-| The .NET SDK | `brew install --cask dotnet-sdk` |
-| A Windows ARM64 C compiler | unpack the `macos-universal` release of [llvm-mingw](https://github.com/mstorsjo/llvm-mingw/releases) into `~/toolchains/llvm-mingw` |
+```bash
+brew install --cask dotnet-sdk
+
+mkdir -p ~/toolchains && cd ~/toolchains
+curl -L "$(curl -s https://api.github.com/repos/mstorsjo/llvm-mingw/releases/latest \
+    | grep -o 'https://[^"]*ucrt-macos-universal.tar.xz')" | tar -xJ
+mv llvm-mingw-*-ucrt-macos-universal llvm-mingw
+```
 
 ### 1. Build the worker and the library
 
@@ -371,15 +378,32 @@ looks for `worker.exe` beside the executable.
 
 ### 4. Run it
 
-Copy `out/` to a Windows on ARM machine and run `VeroExample.exe`. Two jobs appear
-and their progress climbs. **Add job** puts a third in the list. The refresh
-button beside a job sets that job's progress back to zero.
+On a Windows on ARM machine, run `VeroExample.exe` from `out/`.
+
+No Windows machine? Boot one on your Mac. You need a Windows 11 ARM64 ISO from
+Microsoft; the install is unattended and happens once:
+
+```bash
+brew install qemu
+git clone https://github.com/calmdocs/vero
+vero/scripts/run-windows.sh --iso ~/Downloads/win11.iso --install --payload out
+```
+
+After that, every run puts your latest build on a disc inside the VM:
+
+```bash
+vero/scripts/run-windows.sh --payload out
+```
+
+In Windows, copy the `vero` folder off the CD drive and run `VeroExample.exe`.
+Two jobs appear and their progress climbs. **Add job** puts a third in the
+list. The refresh button beside a job sets that job's progress back to zero.
 
 ## Linux: Add the same worker to a Linux app
 
-Every step below runs on your Mac. The library is built in a container,
-because `-buildmode=c-shared` on a Mac emits a Mach-O dylib rather than an ELF
-shared object.
+Every step below runs on your Mac. One of them cannot: Go builds a macOS
+library when it runs on a Mac, and Linux cannot load one, so `libvero.so` is
+built in a Linux container instead.
 
 Install Docker once:
 
@@ -389,9 +413,9 @@ brew install colima docker && colima start
 
 ### 1. Build the worker and the library
 
-Run these in the `worker` directory. It has to sit under your home directory:
-colima shares only `$HOME` with the container, so a build mounted from anywhere
-else finishes without error and leaves no files.
+Run these in the `worker` directory, which has to sit somewhere under your home
+directory. Docker cannot see files outside it, and a build started anywhere
+else prints no error and produces no `libvero.so`.
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src \
@@ -414,9 +438,9 @@ cp ../worker/libvero.so .
 cp ../worker/worker-linux worker
 ```
 
-Those are the names `main.py` uses: it loads `libvero.so` and runs `worker`
-from its own directory, which is why the second copy drops the `-linux`. Add
-`main.py` next:
+`main.py` looks beside itself for two files named exactly `libvero.so` and
+`worker`, which is why the copy renames `worker-linux`: step 1 gave it that
+name so it would not overwrite the macOS worker. Add `main.py` next:
 
 ```python
 #!/usr/bin/env python3
@@ -484,9 +508,10 @@ app.run(None)
 
 ### 3. Run it
 
-On a Linux machine, install `python3-gi` and `gir1.2-gtk-4.0`, then:
+On a Linux machine:
 
 ```bash
+sudo apt-get install -y python3-gi gir1.2-gtk-4.0
 chmod +x main.py && ./main.py
 ```
 
@@ -537,7 +562,7 @@ runs on its own from your Mac:
 | [example/wpf-app](example/wpf-app) | Windows, WPF — `./scripts/run-windows.sh` boots a VM with it on a disc |
 | [example/gtk-app](example/gtk-app) | Linux, GTK4 — `./scripts/run-linux.sh` runs it in a container, opened in Screen Sharing |
 
-## Tests
+Its tests:
 
 ```bash
 go test -race ./...
