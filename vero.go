@@ -1,64 +1,96 @@
-// Package vero builds desktop applications whose logic is written once, in
-// Go, and whose interface is the platform's own toolkit: SwiftUI on macOS, WPF
-// on Windows, GTK on Linux.
+// Package vero is a Go backend with native macOS, Windows and Linux
+// frontends, all built on macOS.
 //
-// # A worker
+// The interface is the platform's own toolkit - SwiftUI, WPF, GTK - and Go
+// supplies everything behind it.  No webview, and no widget set of its own.
 //
-// Your logic lives in a worker: an ordinary Go program, which either runs on
-// its own as a daemon or is launched by an interface.  The same binary does
-// both and does not know which it is doing.
+// # The go worker
+//
+// All three apps run this same Go program.  It is an ordinary binary: run it
+// yourself and it is a daemon, launch it from an interface and it answers that
+// interface, and it does not know which it is doing.
+//
+//	package main
+//
+//	import (
+//		"fmt"
+//		"time"
+//
+//		"github.com/calmdocs/vero"
+//	)
+//
+//	// The contract with the interface.
+//	type Job struct {
+//		vero.WithID[int]
+//		Name     string `json:"name"`
+//		Progress int    `json:"progress"`
+//		Paused   bool   `json:"paused"`
+//	}
+//
+//	type Status struct {
+//		Jobs []Job `json:"jobs"`
+//	}
 //
 //	func main() {
 //		w := vero.NewWorker(vero.WorkerOptions{})
+//		jobs := w.NewState(Status{Jobs: []Job{
+//			{ID: 1, Name: "Photos"},
+//			{ID: 2, Name: "Documents"},
+//		}})
 //
-//		// Everything the interface draws.  vero pushes it whenever it
-//		// changes, and every reply below is it.
-//		jobs := w.NewState(Status{Jobs: []Job{{Name: "Photos"}}})
-//
-//		// Your work, under the state's lock.
+//		// The actual work.  Yours goes here.
 //		jobs.Every(200*time.Millisecond, func(s *Status) {
 //			for i := range s.Jobs {
-//				s.Jobs[i].Progress++
+//				if !s.Jobs[i].Paused && s.Jobs[i].Progress < 100 {
+//					s.Jobs[i].Progress++
+//				}
 //			}
 //		})
 //
-//		// A button with no payload, and a button on one row.
-//		jobs.Update("addJob", func(s *Status) error { … })
-//		jobs.UpdateItem("pauseJob", func(j *Job) error { … })
+//		jobs.Update("addJob", func(s *Status) error {
+//			n := len(s.Jobs) + 1
+//			s.Jobs = append(s.Jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
+//			return nil
+//		})
 //
-//		// Blocks until the interface goes away.
+//		jobs.UpdateItem("restartJob", func(j *Job) error {
+//			j.Progress = 0
+//			return nil
+//		})
+//
+//		jobs.UpdateItem("pauseJob", func(j *Job) error {
+//			j.Paused = !j.Paused
+//			return nil
+//		})
+//
 //		w.Serve()
 //	}
 //
-// The examples below are complete and compile.  Worker.Handle is there for a
-// reply that is not the state, with its own request and reply types.
+// # The interface
 //
-// # The three parts
-//
-//	your worker    the Go program above
-//	a Supervisor   launches it, restarts it when it dies, carries the messages
-//	an interface   native code, driving the Supervisor through nine C functions
-//
-// The bindings over those nine functions ship with vero: Sources/Vero for
-// Swift, bindings/csharp for C#, bindings/python for Python.  An interface
-// declares the same types its worker does and calls handlers by name.
+// A Supervisor launches the worker, restarts it if it dies, and carries the
+// messages.  It is Go, embedded in the application as a C archive, so the
+// connection handling is written once rather than once per platform.  Native
+// code drives it through nine C functions, and a binding over those ships with
+// vero: Sources/Vero for Swift, bindings/csharp for C#, bindings/python for
+// Python.  An interface declares the same types the worker does, and calls
+// handlers by the same names.
 //
 // # The channel
 //
-// The interface and the worker talk over the pipes the operating system
-// created when the supervisor launched it.  That is not a smaller socket, it
-// is a different guarantee: there is no filesystem object, so nothing else on
-// the machine can connect even in principle, and the channel dies with the
-// process.  It also means a worker cannot outlive the interface that started
-// it - when the application quits, or crashes, or is force quit, the worker's
-// standard input closes and it exits, with no PID file and no heartbeat to get
-// wrong.
+// The two talk over the pipes the operating system created when the supervisor
+// launched the worker.  That is not a smaller socket, it is a different
+// guarantee: there is no filesystem object, so nothing else on the machine can
+// connect even in principle, and the channel dies with the process.  It also
+// means a worker cannot outlive the interface that started it - when the
+// application quits, or crashes, or is force quit, the worker's standard input
+// closes and it exits, with no PID file and no heartbeat to get wrong.
 //
 // # Crashes
 //
 // The worker is a separate process, so a panic in it - or one of Go's
 // unrecoverable runtime failures, like a concurrent map write, which recover
-// cannot catch - takes down the worker and not your interface.  The supervisor
+// cannot catch - takes down the worker and not the interface.  The supervisor
 // notices, reports it, and starts a new one.
 //
 // # The wire format
