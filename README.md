@@ -29,8 +29,10 @@ git clone https://github.com/calmdocs/vero && cd vero
 
 `--iso` is a Windows 11 ARM64 ISO, downloaded first from
 [Microsoft](https://www.microsoft.com/en-us/software-download/windows11arm64).
-It is needed only until the VM exists in `~/vm/vero-windows`; macOS and Linux
-open without it.
+The third line installs it into a VM at `~/vm/vero-windows`, which takes a few
+minutes and happens once: after that `./scripts/run.sh` on its own opens all
+three, and the ISO can be deleted. Without one, macOS and Linux still open and
+Windows is skipped.
 
 ## The worker
 
