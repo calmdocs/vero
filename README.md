@@ -2,6 +2,7 @@
 
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
+[Quickstart](#quickstart) ·
 [The worker](#the-worker) ·
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
@@ -16,6 +17,19 @@
 </tr>
 </table>
 
+## Quickstart
+
+See all three running without building anything yourself:
+
+```bash
+git clone https://github.com/calmdocs/vero && cd vero
+./scripts/setup.sh                              # installs toolchains, builds everything
+./scripts/run.sh --iso ~/Downloads/win11.iso    # opens all three
+```
+
+`--iso` is a Windows 11 ARM64 ISO from Microsoft, needed only until the VM
+exists in `~/vm/vero-windows`. macOS and Linux open without it.
+
 ## The worker
 
 All three apps below run this same Go program. Each section builds it for its
@@ -23,7 +37,7 @@ own platform.
 
 ```bash
 brew install go
-mkdir worker && cd worker
+mkdir -p ~/vero-example/worker && cd ~/vero-example/worker
 go mod init worker
 go get github.com/calmdocs/vero
 ```
@@ -252,13 +266,14 @@ list. The refresh button beside a job sets that job's progress back to zero.
 
 To add vero to an Xcode application instead of this package: File -> Add
 Package Dependencies... -> `https://github.com/calmdocs/vero`, and drag
-`worker/worker` in with your app ticked under **Add to targets**. Xcode writes
-the `@main` App itself, so paste only the types and `ContentView` above.
+`worker/worker` in with your app ticked under **Add to targets**. Paste the
+code above into `ContentView.swift`, leaving out `struct VeroExampleApp`: an
+Xcode project already has a `@main` App of its own, and two will not compile.
 
 ## Windows: Add the same worker to a Windows app
 
 Every step below runs on your Mac. Only step 4 needs a Windows on ARM
-machine, and step 4 can boot one for you.
+machine, and step 4 can boot one for you on macOS.
 
 Install the .NET SDK and a Windows ARM64 C compiler, once:
 
@@ -285,7 +300,7 @@ CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
 
 ### 2. The Windows WPF app
 
-Make a directory beside `worker`, and fetch the C# binding into it:
+Run these:
 
 ```bash
 mkdir ../wpf-app && cd ../wpf-app
@@ -416,9 +431,6 @@ dotnet publish -c Release -r win-arm64 --self-contained \
 cp ../worker/vero.dll ../worker/worker.exe out/
 ```
 
-Keep both names: `Vero.cs` imports `vero.dll` by name, and `MainWindow.xaml.cs`
-looks for `worker.exe` beside the executable.
-
 ### 4. Run it
 
 On a Windows on ARM machine, run `VeroExample.exe` from `out/`.
@@ -439,17 +451,18 @@ install is unattended and happens once:
 vero/scripts/run-windows.sh --iso ~/Downloads/win11.iso --install --payload out
 ```
 
-In Windows, copy the `vero` folder off the CD drive and run `VeroExample.exe`.
-Two jobs appear and their progress climbs. **Add job** puts a third in the
-list. The refresh button beside a job sets that job's progress back to zero.
+Windows opens in a window on your Mac, which you use like any other. In it,
+copy the `vero` folder from the CD drive to `C:\`, and run `VeroExample.exe`
+inside it. Two jobs appear and their progress climbs. **Add job** puts a third
+in the list. The refresh button beside a job sets that job's progress back to
+zero.
 
 ## Linux: Add the same worker to a Linux app
 
-Every step below runs on your Mac, but Go cannot build a Linux library on a
-Mac: it produces a macOS one, which Linux cannot load. So `libvero.so` is built
-in a Linux container, and everything else on the Mac itself.
+`libvero.so` has to be compiled on Linux, so step 1 builds it in a container.
+Everything else runs on your Mac.
 
-Install Docker once:
+Install colima and Docker once:
 
 ```bash
 brew install colima docker && colima start
@@ -457,9 +470,7 @@ brew install colima docker && colima start
 
 ### 1. Build the worker and the library
 
-Run these in the `worker` directory, which has to sit somewhere under your home
-directory. Docker cannot see files outside it, and a build started anywhere
-else prints no error and produces no `libvero.so`.
+Run these in the `worker` directory:
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src \
@@ -472,8 +483,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o worker-linux .
 
 ### 2. The Linux GTK4 app
 
-Make a directory beside `worker`, fetch the Python binding into it, and copy
-in the two files from step 1:
+Run these:
 
 ```bash
 mkdir ../gtk-app && cd ../gtk-app
@@ -482,9 +492,7 @@ cp ../worker/libvero.so .
 cp ../worker/worker-linux worker
 ```
 
-`main.py` looks beside itself for two files named exactly `libvero.so` and
-`worker`, which is why the copy renames `worker-linux`: step 1 gave it that
-name so it would not overwrite the macOS worker. Add `main.py` next:
+Then add `main.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -586,17 +594,6 @@ list. The refresh button beside a job sets that job's progress back to zero.
 
 ## The examples in this repository
 
-All three at once:
-
-```bash
-git clone https://github.com/calmdocs/vero && cd vero
-./scripts/setup.sh                              # installs toolchains, builds everything
-./scripts/run.sh --iso ~/Downloads/win11.iso    # opens all three
-```
-
-`--iso` is a Windows 11 ARM64 ISO from Microsoft, needed only the first time:
-`run.sh` installs Windows into a VM once and reuses it after that.
-
 Each is the app built above, with job phases and a status footer added. Each
 can also be run by itself from your Mac:
 
@@ -606,7 +603,7 @@ can also be run by itself from your Mac:
 | [example/wpf-app](example/wpf-app) | Windows, WPF — `./scripts/run-windows.sh` boots a VM with it on a disc |
 | [example/gtk-app](example/gtk-app) | Linux, GTK4 — `./scripts/run-linux.sh` runs it in a container, opened in Screen Sharing |
 
-Its tests:
+The repository's own tests:
 
 ```bash
 go test -race ./...
