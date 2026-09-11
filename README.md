@@ -2,22 +2,22 @@
 
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
-[macOS](#macos-add-vero-to-your-own-macos-app) ·
-[Windows](#windows-add-the-same-worker-to-a-windows-app) ·
-[Linux](#linux-add-the-same-worker-to-a-linux-app) ·
-[All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
-[More](#more) ·
-[Tests](#tests)
+[1. macOS](#1-macos-add-vero-to-your-own-macos-app) ·
+[2. Windows](#2-windows-add-the-same-worker-to-a-windows-app) ·
+[3. Linux](#3-linux-add-the-same-worker-to-a-linux-app) ·
+[4. All three at once](#4-set-up-and-run-all-three-apps-in-three-lines) ·
+[5. More](#5-more) ·
+[6. Tests](#6-tests)
 
 <table>
 <tr>
-<td align="center" width="33%"><a href="#macos-add-vero-to-your-own-macos-app"><img src="docs/screenshots/macos.gif" width="100%"></a><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
-<td align="center" width="33%"><a href="#windows-add-the-same-worker-to-a-windows-app"><img src="docs/screenshots/windows.gif" width="100%"></a><br><sub><b>Windows</b> — WPF</sub></td>
-<td align="center" width="33%"><a href="#linux-add-the-same-worker-to-a-linux-app"><img src="docs/screenshots/linux.gif" width="100%"></a><br><sub><b>Linux</b> — GTK4</sub></td>
+<td align="center" width="33%"><a href="#1-macos-add-vero-to-your-own-macos-app"><img src="docs/screenshots/macos.gif" width="100%"></a><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
+<td align="center" width="33%"><a href="#2-windows-add-the-same-worker-to-a-windows-app"><img src="docs/screenshots/windows.gif" width="100%"></a><br><sub><b>Windows</b> — WPF</sub></td>
+<td align="center" width="33%"><a href="#3-linux-add-the-same-worker-to-a-linux-app"><img src="docs/screenshots/linux.gif" width="100%"></a><br><sub><b>Linux</b> — GTK4</sub></td>
 </tr>
 </table>
 
-## macOS: Add vero to your own macOS app
+## 1. macOS: Add vero to your own macOS app
 
 ### 1. The go worker
 
@@ -205,7 +205,7 @@ struct ContentView: View {
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-## Windows: Add the same worker to a Windows app
+## 2. Windows: Add the same worker to a Windows app
 
 The `main.go` from step 1 is unchanged, and every step below runs on your
 Mac. Only step 4 needs Windows.
@@ -376,7 +376,7 @@ No Windows machine? `./scripts/run-windows.sh` boots one in a VM on your Mac
 with this build on a disc. [example/wpf-app](example/wpf-app) is the same app,
 styled.
 
-## Linux: Add the same worker to a Linux app
+## 3. Linux: Add the same worker to a Linux app
 
 The `main.go` from step 1 is unchanged, and every step below runs on your Mac
 as well. The library is built in a container, because `-buildmode=c-shared` on
@@ -518,7 +518,7 @@ list, and the arrow beside a job sends it back to the beginning.
 [example/gtk-app](example/gtk-app) is the same app, styled.
 `./scripts/run-linux.sh` runs it this way in one command.
 
-## Set up and run all three apps in three lines
+## 4. Set up and run all three apps in three lines
 
 ```bash
 git clone https://github.com/calmdocs/vero && cd vero
@@ -529,7 +529,7 @@ git clone https://github.com/calmdocs/vero && cd vero
 `--iso` is a Windows 11 Arm64 ISO, needed only the first time: `run.sh`
 installs Windows into a VM once and reuses it after that.
 
-## More
+## 5. More
 
 | | |
 |---|---|
@@ -539,7 +539,7 @@ installs Windows into a VM once and reuses it after that.
 | [docs/protocol.md](docs/protocol.md) | wire format, errors, the single-worker lock |
 | [docs/styling.md](docs/styling.md) | the same examples, styled |
 
-## Tests
+## 6. Tests
 
 ```bash
 go test -race ./...
@@ -547,6 +547,6 @@ cd bindings/python && python3 -m unittest
 swift build
 ```
 
-## Licence
+## 7. Licence
 
 MIT
