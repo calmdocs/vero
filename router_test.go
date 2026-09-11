@@ -33,16 +33,16 @@ func routerWorker() {
 	// Both return empty lists. Decoded by guessing, an empty JSON array
 	// satisfies either type, so whichever is tried first wins - which is the
 	// bug this exists to remove.
-	w.Handle("getGroups", func(ctx context.Context, _ struct{}) ([]Group, error) {
+	vero.Handle(w, "getGroups", func(ctx context.Context, _ struct{}) ([]Group, error) {
 		return []Group{}, nil
 	})
-	w.Handle("getFolders", func(ctx context.Context, _ struct{}) ([]Folder, error) {
+	vero.Handle(w, "getFolders", func(ctx context.Context, _ struct{}) ([]Folder, error) {
 		return []Folder{}, nil
 	})
-	w.Handle("addGroup", func(ctx context.Context, req AddGroup) (Group, error) {
+	vero.Handle(w, "addGroup", func(ctx context.Context, req AddGroup) (Group, error) {
 		return Group{ID: len(req.Name), Name: req.Name}, nil
 	})
-	w.Handle("slow", func(ctx context.Context, _ struct{}) (string, error) {
+	vero.Handle(w, "slow", func(ctx context.Context, _ struct{}) (string, error) {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()

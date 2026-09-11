@@ -60,13 +60,13 @@ type state interface {
 // NewState gives this worker its state, and returns it for the application to
 // change with Do.
 //
-//	jobs := w.NewState(Status{Jobs: []Job{{ID: 1, Name: "Photos"}}})
+//	jobs := vero.NewState(w, Status{Jobs: []Job{{ID: 1, Name: "Photos"}}})
 //	jobs.Do(func(s *Status) { s.Jobs[0].Progress++ })
 //
 // One worker has one state: calling this twice replaces the first, because the
 // event channel carries no name and an interface would have no way to tell two
 // kinds of event apart.
-func (w *Worker) NewState[T any](initial T) *State[T] {
+func NewState[T any](w *Worker, initial T) *State[T] {
 	s := &State[T]{v: initial, w: w}
 	w.state = s
 	return s
@@ -89,8 +89,8 @@ func (w *Worker) NewState[T any](initial T) *State[T] {
 // work: anything slow belongs in a goroutine the handler starts, writing back
 // through Do.  A handler that replies with something other than the state is
 // Worker.Handle.
-func (s *State[T]) UpdateWith[Req any](name string, fn func(state *T, request Req) error) {
-	s.w.Handle(name, func(_ context.Context, request Req) (json.RawMessage, error) {
+func UpdateWith[T any, Req any](s *State[T], name string, fn func(state *T, request Req) error) {
+	Handle(s.w, name, func(_ context.Context, request Req) (json.RawMessage, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if err := fn(&s.v, request); err != nil {
@@ -139,6 +139,8 @@ func (s *State[T]) Every(interval time.Duration, fn func(*T)) {
 
 // Keyed is anything the interface can name: a job with an id, a row with a
 // primary key.  Key is what the ID in a request matches.
+//
+//	func (j Job) Key() int { return j.ID }
 type Keyed[K comparable] interface {
 	Key() K
 }
@@ -176,7 +178,7 @@ func Edit[T Keyed[K], K comparable](items []T, key K, change func(*T)) error {
 //
 //	func (j *Job) Pause() error { j.Paused = !j.Paused; return nil }
 //
-//	jobs.UpdateItem("pauseJob", (*Job).Pause)
+//	vero.UpdateItem(jobs, "pauseJob", (*Job).Pause)
 //
 // The request is an ID, the item is found by Key, change runs under the lock
 // with a pointer into the state, and the reply is the new state.  A request
@@ -186,9 +188,9 @@ func Edit[T Keyed[K], K comparable](items []T, key K, change func(*T)) error {
 // field, or the state itself when it is a []J.  A state with two fields of the
 // same item type cannot say which, and says so at registration rather than
 // guessing.
-func (s *State[T]) UpdateItem[J Keyed[K], K comparable](name string, change func(*J) error) {
+func UpdateItem[T any, J Keyed[K], K comparable](s *State[T], name string, change func(*J) error) {
 	field := itemsField[T, J]()
-	s.UpdateWith(name, func(state *T, req ID[K]) error {
+	UpdateWith(s, name, func(state *T, req ID[K]) error {
 		item, err := find(field(state), req.ID)
 		if err != nil {
 			return err
@@ -231,26 +233,10 @@ func itemsField[T any, J any]() func(*T) []J {
 //
 //	func (s *Status) Add() error { … }
 //
-//	jobs.Update("addJob", (*Status).Add)
+//	vero.Update(jobs, "addJob", (*Status).Add)
 //
 // UpdateWith is the same for a request that carries something, and UpdateItem
 // for one that names an item.
-func (s *State[T]) Update(name string, fn func(*T) error) {
-	s.UpdateWith(name, func(state *T, _ struct{}) error { return fn(state) })
+func Update[T any](s *State[T], name string, fn func(*T) error) {
+	UpdateWith(s, name, func(state *T, _ struct{}) error { return fn(state) })
 }
-
-// WithID gives an item the id the interface names it by, and the Key that
-// finds it.  Embed it and the field is still yours to set:
-//
-//	type Job struct {
-//	    vero.WithID[int]
-//	    Name string `json:"name"`
-//	}
-//
-//	Job{ID: 1, Name: "Photos"}
-type WithID[K comparable] struct {
-	ID K `json:"id"`
-}
-
-// Key is the id, so anything embedding WithID can be found by Find and Edit.
-func (w WithID[K]) Key() K { return w.ID }

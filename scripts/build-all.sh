@@ -50,6 +50,12 @@ lipo -create "$DIST/worker-darwin-arm64" "$DIST/worker-darwin-amd64" \
 echo "  worker-macos-universal"
 
 echo "macOS: a universal C archive for Swift to link"
+# The Go version decides the minimum macOS this archive supports, whatever
+# MACOSX_DEPLOYMENT_TARGET says: go1.27 stamps darwin/arm64 objects macOS 13,
+# and an application targeting 12 then fails to link against them.  Pinned
+# here so a release cannot quietly drop macOS 12 users because of whichever Go
+# happened to be on the PATH.
+export GOTOOLCHAIN=${MACOS_GOTOOLCHAIN:-go1.26.0}
 export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
 CGO_ENABLED=1 GOARCH=arm64 \
     go build -buildmode=c-archive -o "$DIST/libvero-arm64.a" "$CSHIM"
@@ -57,6 +63,8 @@ CGO_ENABLED=1 GOARCH=amd64 CC="clang -arch x86_64 -mmacosx-version-min=$MACOSX_D
     go build -buildmode=c-archive -o "$DIST/libvero-amd64.a" "$CSHIM"
 lipo -create "$DIST/libvero-arm64.a" "$DIST/libvero-amd64.a" -output "$DIST/libvero.a"
 echo "  libvero.a ($(lipo -info "$DIST/libvero.a" | sed 's/.*are: //'))"
+
+unset GOTOOLCHAIN
 
 echo "Windows: one DLL per architecture"
 if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then

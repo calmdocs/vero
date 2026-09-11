@@ -16,10 +16,10 @@ type restart struct {
 func main() {
 	w := vero.NewWorker(vero.WorkerOptions{})
 
-	w.Handle("status", func(context.Context, struct{}) (map[string]any, error) {
+	vero.Handle(w, "status", func(context.Context, struct{}) (map[string]any, error) {
 		return map[string]any{"jobs": []string{"Photos", "Documents"}, "working": true}, nil
 	})
-	w.Handle("restartJob", func(_ context.Context, req restart) (map[string]int, error) {
+	vero.Handle(w, "restartJob", func(_ context.Context, req restart) (map[string]int, error) {
 		if req.ID == 0 {
 			return nil, fmt.Errorf("no such job")
 		}

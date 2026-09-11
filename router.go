@@ -49,7 +49,7 @@ func newRouter() *router {
 // Req is what the request decodes into and Rep is what the reply is encoded
 // from, so neither the handler nor the caller has to guess. Use struct{} for a
 // request that carries nothing.
-func (w *Worker) Handle[Req any, Rep any](name string, fn func(ctx context.Context, request Req) (Rep, error)) {
+func Handle[Req any, Rep any](w *Worker, name string, fn func(ctx context.Context, request Req) (Rep, error)) {
 	r := w.router
 	r.mu.Lock()
 	defer r.mu.Unlock()

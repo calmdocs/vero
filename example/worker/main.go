@@ -23,11 +23,14 @@ import (
 )
 
 type Job struct {
-	vero.WithID[int]
+	ID       int    `json:"id"`
 	Name     string `json:"name"`
 	Phase    string `json:"phase"`
 	Progress int    `json:"progress"`
 }
+
+// Key is how an id in a request finds this job.
+func (j Job) Key() int { return j.ID }
 
 // Restart puts one job back to the beginning.  A method on the job, because
 // that is what the button on its row means.
@@ -73,7 +76,7 @@ func main() {
 
 	// Everything the interface draws.  The worker pushes it whenever it
 	// changes, and every reply below is it.
-	state := w.NewState(Status{
+	state := vero.NewState(w, Status{
 		Jobs: []Job{
 			{ID: 1, Name: "Photos", Phase: "waiting"},
 			{ID: 2, Name: "Documents", Phase: "waiting"},
@@ -95,13 +98,13 @@ func main() {
 
 	// Something opened a window and needs to draw it now: no change, and the
 	// reply is the state.
-	state.Update("status", func(*Status) error { return nil })
+	vero.Update(state, "status", func(*Status) error { return nil })
 
 	// The button on a row names one job.  Update rather than EditItem, because
 	// Working is derived from every job and has to be recomputed after the
 	// change.  A request naming a job that is gone is refused, and the worker
 	// carries on: a bad request and a broken worker want different responses.
-	state.UpdateWith("restartJob", func(s *Status, req vero.ID[int]) error {
+	vero.UpdateWith(state, "restartJob", func(s *Status, req vero.ID[int]) error {
 		if err := vero.Edit(s.Jobs, req.ID, (*Job).Restart); err != nil {
 			// vero says "no item"; an interface should hear what this
 			// application calls the thing.
@@ -149,7 +152,7 @@ func handle(state *vero.State[Status]) vero.Handler {
 
 // version is what -version reports. An interface compares it with the copy it
 // has on disk, so it has to increase on every release.
-var version = "0.7.1"
+var version = "0.8.0"
 
 // work is the pretend business logic: it moves jobs along and says so.
 func work(w *vero.Worker, state *vero.State[Status]) {

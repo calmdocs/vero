@@ -54,11 +54,14 @@ import (
 
 // The contract with the interface.
 type Job struct {
-	vero.WithID[int]
+	ID       int    `json:"id"`
 	Name     string `json:"name"`
 	Progress int    `json:"progress"`
 	Paused   bool   `json:"paused"`
 }
+
+// Key is how an id in a request finds one job.
+func (j Job) Key() int { return j.ID }
 
 type Status struct {
 	Jobs []Job `json:"jobs"`
@@ -66,7 +69,7 @@ type Status struct {
 
 func main() {
 	w := vero.NewWorker(vero.WorkerOptions{})
-	jobs := w.NewState(Status{Jobs: []Job{
+	jobs := vero.NewState(w, Status{Jobs: []Job{
 		{ID: 1, Name: "Photos"},
 		{ID: 2, Name: "Documents"},
 	}})
@@ -80,18 +83,18 @@ func main() {
 		}
 	})
 
-	jobs.Update("addJob", func(s *Status) error {
+	vero.Update(jobs, "addJob", func(s *Status) error {
 		n := len(s.Jobs) + 1
 		s.Jobs = append(s.Jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
 		return nil
 	})
 
-	jobs.UpdateItem("restartJob", func(j *Job) error {
+	vero.UpdateItem(jobs, "restartJob", func(j *Job) error {
 		j.Progress = 0
 		return nil
 	})
 
-	jobs.UpdateItem("pauseJob", func(j *Job) error {
+	vero.UpdateItem(jobs, "pauseJob", func(j *Job) error {
 		j.Paused = !j.Paused
 		return nil
 	})
