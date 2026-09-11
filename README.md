@@ -27,8 +27,10 @@ git clone https://github.com/calmdocs/vero && cd vero
 ./scripts/run.sh --iso ~/Downloads/win11.iso    # opens all three
 ```
 
-`--iso` is a Windows 11 ARM64 ISO from Microsoft, needed only until the VM
-exists in `~/vm/vero-windows`. macOS and Linux open without it.
+`--iso` is a Windows 11 ARM64 ISO, downloaded first from
+[Microsoft](https://www.microsoft.com/en-us/software-download/windows11arm64).
+It is needed only until the VM exists in `~/vm/vero-windows`; macOS and Linux
+open without it.
 
 ## The worker
 
@@ -444,8 +446,9 @@ vero/scripts/run-windows.sh --payload out
 ```
 
 That boots the VM in `~/vm/vero-windows` with your build on a disc. If there is
-no VM there yet, make one first with a Windows 11 ARM64 ISO from Microsoft. The
-install is unattended and happens once:
+no VM there yet, download a Windows 11 ARM64 ISO from
+[Microsoft](https://www.microsoft.com/en-us/software-download/windows11arm64)
+and make one. The install is unattended and happens once:
 
 ```bash
 vero/scripts/run-windows.sh --iso ~/Downloads/win11.iso --install --payload out
