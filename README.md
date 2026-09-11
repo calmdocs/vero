@@ -31,8 +31,8 @@ git clone https://github.com/calmdocs/vero && cd vero
 [Microsoft](https://www.microsoft.com/en-us/software-download/windows11arm64).
 The third line installs it into a VM at `~/vm/vero-windows`, which may take a
 bit of time and happens once: after that `./scripts/run.sh` on its own opens
-all three, and the ISO can be deleted. Without one, macOS and Linux still open
-and Windows is skipped.
+all three, and the ISO can be deleted. Without the `--iso ~/Downloads/win11.iso`
+flag, macOS and Linux still open and Windows is skipped.
 
 ## The go worker
 
