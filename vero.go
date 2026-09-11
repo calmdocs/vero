@@ -1,31 +1,58 @@
 // Package vero builds desktop applications whose logic is written once, in
-// Go, and whose interface is the platform's own toolkit - SwiftUI on macOS,
-// WinUI on Windows, GTK on Linux.
+// Go, and whose interface is the platform's own toolkit: SwiftUI on macOS, WPF
+// on Windows, GTK on Linux.
 //
-// The Go GUI field splits three ways: Fyne and Gio draw their own widgets, so
-// the result looks the same everywhere and native nowhere; Wails and Lorca
-// wrap a webview, which is Electron's tradeoff with a smaller binary; Walk is
-// Windows only.  vero takes the fourth path.  The interface is genuinely the
-// system's, and Go supplies everything behind it.
+// # A worker
 //
-// # The shape of a vero application
+// Your logic lives in a worker: an ordinary Go program, which either runs on
+// its own as a daemon or is launched by an interface.  The same binary does
+// both and does not know which it is doing.
 //
-// Your logic lives in a worker: an ordinary Go program that either runs on its
-// own, as a daemon on a headless server, or is launched by a GUI.  The same
-// binary does both, and it does not know which it is doing beyond one flag.
+//	func main() {
+//		w := vero.NewWorker(vero.WorkerOptions{})
 //
-//	worker  ->  your logic; runs headless, or behind an interface
-//	        ->  a Supervisor launches it, restarts it, and talks to it
-//	        ->  a native interface drives the Supervisor through five C functions
+//		// Everything the interface draws.  vero pushes it whenever it
+//		// changes, and every reply below is it.
+//		jobs := w.NewState(Status{Jobs: []Job{{Name: "Photos"}}})
 //
-// The channel between the interface and the worker is the pipes the operating
-// system already gave you when the supervisor launched it.  That is not a
-// smaller version of a socket, it is a different guarantee: there is no
-// filesystem object, so nothing else on the machine can connect even in
-// principle, and the channel is destroyed with the process.  It also means a
-// worker cannot outlive the interface that started it - when the application
-// quits, or crashes, or is force quit, the worker's standard input closes and
-// it exits, with no PID file and no heartbeat to get wrong.
+//		// Your work, under the state's lock.
+//		jobs.Every(200*time.Millisecond, func(s *Status) {
+//			for i := range s.Jobs {
+//				s.Jobs[i].Progress++
+//			}
+//		})
+//
+//		// A button with no payload, and a button on one row.
+//		jobs.Update("addJob", func(s *Status) error { … })
+//		jobs.UpdateItem("pauseJob", func(j *Job) error { … })
+//
+//		// Blocks until the interface goes away.
+//		w.Serve()
+//	}
+//
+// The examples below are complete and compile.  Worker.Handle is there for a
+// reply that is not the state, with its own request and reply types.
+//
+// # The three parts
+//
+//	your worker    the Go program above
+//	a Supervisor   launches it, restarts it when it dies, carries the messages
+//	an interface   native code, driving the Supervisor through nine C functions
+//
+// The bindings over those nine functions ship with vero: Sources/Vero for
+// Swift, bindings/csharp for C#, bindings/python for Python.  An interface
+// declares the same types its worker does and calls handlers by name.
+//
+// # The channel
+//
+// The interface and the worker talk over the pipes the operating system
+// created when the supervisor launched it.  That is not a smaller socket, it
+// is a different guarantee: there is no filesystem object, so nothing else on
+// the machine can connect even in principle, and the channel dies with the
+// process.  It also means a worker cannot outlive the interface that started
+// it - when the application quits, or crashes, or is force quit, the worker's
+// standard input closes and it exits, with no PID file and no heartbeat to get
+// wrong.
 //
 // # Crashes
 //
@@ -39,7 +66,7 @@
 // Newline delimited JSON, in both directions.  Your own message travels in
 // "p", untouched:
 //
-//	to the worker     {"id":7,"p":<your request>}
+//	to the worker     {"id":7,"n":"addJob","p":<your request>}
 //	from the worker   {"t":"reply","id":7,"p":<your reply>}
 //	                  {"t":"reply","id":7,"e":"what went wrong"}
 //	                  {"t":"event","p":<your event>}
