@@ -3,9 +3,10 @@
 A GTK4 interface for the Go worker in `../worker`: a progress bar and a restart
 button on each row, and a footer showing what the worker is doing.
 
-On Linux, with `python3-gi` and `gir1.2-gtk-4.0` installed:
+On Linux:
 
 ```bash
+sudo apt-get install -y python3-gi gir1.2-gtk-4.0
 ./build.sh
 ./main.py
 ```

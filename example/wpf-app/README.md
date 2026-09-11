@@ -16,7 +16,3 @@ and boots a Windows VM with it:
 ```bash
 ../../scripts/run-windows.sh
 ```
-
-Build `vero.dll` for the architecture Windows will run it on: an amd64 DLL
-loaded into an x64 process emulated on Windows-on-ARM either hangs on the first
-call into Go or exits `0xC0000409`.

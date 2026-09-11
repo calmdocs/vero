@@ -598,14 +598,11 @@ list. The refresh button beside a job sets that job's progress back to zero.
 
 ## Run the examples
 
-Each is the app built above, with job phases and a status footer added. Each
-can also be run by itself from your Mac:
-
 | | |
 |---|---|
 | [example/menubar-app](example/menubar-app) | macOS, SwiftUI |
-| [example/wpf-app](example/wpf-app) | Windows, WPF — `./scripts/run-windows.sh` boots a VM with it on a disc |
-| [example/gtk-app](example/gtk-app) | Linux, GTK4 — `./scripts/run-linux.sh` runs it in a container, opened in Screen Sharing |
+| [example/wpf-app](example/wpf-app) | Windows, WPF |
+| [example/gtk-app](example/gtk-app) | Linux, GTK4 |
 
 The repository's own tests:
 
