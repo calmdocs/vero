@@ -19,7 +19,7 @@
 
 ## Quickstart
 
-See all three running without building anything yourself:
+See all three running before building your own:
 
 ```bash
 git clone https://github.com/calmdocs/vero && cd vero
@@ -141,8 +141,8 @@ func main() {
 
 ## macOS: Add vero to your own macOS app
 
-Install Xcode from the App Store, which also installs the `lipo` needed to
-build the Go worker.
+Install Xcode from the App Store. It brings the Swift toolchain that steps 2
+and 3 use, and the `lipo` in step 1.
 
 ### 1. Build the worker
 
@@ -254,6 +254,12 @@ struct ContentView: View {
 }
 ```
 
+To add vero to an Xcode application instead of this package: File -> Add
+Package Dependencies... -> `https://github.com/calmdocs/vero`, and drag
+`worker/worker` in with your app ticked under **Add to targets**. Paste the
+code above into `ContentView.swift`, leaving out `struct VeroExampleApp`: an
+Xcode project already has a `@main` App of its own, and two will not compile.
+
 ### 3. Run it
 
 The worker has to sit beside the executable, which is where vero looks when the
@@ -267,12 +273,6 @@ cp ../worker/worker .build/debug/worker
 
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list. The refresh button beside a job sets that job's progress back to zero.
-
-To add vero to an Xcode application instead of this package: File -> Add
-Package Dependencies... -> `https://github.com/calmdocs/vero`, and drag
-`worker/worker` in with your app ticked under **Add to targets**. Paste the
-code above into `ContentView.swift`, leaving out `struct VeroExampleApp`: an
-Xcode project already has a `@main` App of its own, and two will not compile.
 
 ## Windows: Add the same worker to a Windows app
 
@@ -439,21 +439,20 @@ cp ../worker/vero.dll ../worker/worker.exe out/
 
 On a Windows on ARM machine, run `VeroExample.exe` from `out/`.
 
-No Windows machine? Boot one on your Mac:
+No Windows machine? Boot one on your Mac. The first time, install Windows into
+the VM from a [Microsoft](https://www.microsoft.com/en-us/software-download/windows11arm64)
+ISO. The install is unattended, and happens once:
 
 ```bash
 brew install qemu
 git clone https://github.com/calmdocs/vero
-vero/scripts/run-windows.sh --payload out
+vero/scripts/run-windows.sh --iso ~/Downloads/win11.iso --install --payload out
 ```
 
-That boots the VM in `~/vm/vero-windows` with your build on a disc. If there is
-no VM there yet, download a Windows 11 ARM64 ISO from
-[Microsoft](https://www.microsoft.com/en-us/software-download/windows11arm64)
-and make one. The install is unattended and happens once:
+After that, this boots the same VM with your latest build on a disc:
 
 ```bash
-vero/scripts/run-windows.sh --iso ~/Downloads/win11.iso --install --payload out
+vero/scripts/run-windows.sh --payload out
 ```
 
 Windows opens in a window on your Mac, which you use like any other. In it,
