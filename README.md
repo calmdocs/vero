@@ -2,22 +2,22 @@
 
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
-[macOS](#add-vero-to-your-own-macos-app) ·
-[Windows](#add-the-same-worker-to-a-windows-app) ·
-[Linux](#add-the-same-worker-to-a-linux-app) ·
+[macOS](#macos-add-vero-to-your-own-macos-app) ·
+[Windows](#windows-add-the-same-worker-to-a-windows-app) ·
+[Linux](#linux-add-the-same-worker-to-a-linux-app) ·
 [All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
 [More](#more) ·
 [Tests](#tests)
 
 <table>
 <tr>
-<td align="center" width="33%"><a href="#add-vero-to-your-own-macos-app"><img src="docs/screenshots/macos.gif" width="100%"></a><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
-<td align="center" width="33%"><a href="#add-the-same-worker-to-a-windows-app"><img src="docs/screenshots/windows.gif" width="100%"></a><br><sub><b>Windows</b> — WPF</sub></td>
-<td align="center" width="33%"><a href="#add-the-same-worker-to-a-linux-app"><img src="docs/screenshots/linux.gif" width="100%"></a><br><sub><b>Linux</b> — GTK4</sub></td>
+<td align="center" width="33%"><a href="#macos-add-vero-to-your-own-macos-app"><img src="docs/screenshots/macos.gif" width="100%"></a><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
+<td align="center" width="33%"><a href="#windows-add-the-same-worker-to-a-windows-app"><img src="docs/screenshots/windows.gif" width="100%"></a><br><sub><b>Windows</b> — WPF</sub></td>
+<td align="center" width="33%"><a href="#linux-add-the-same-worker-to-a-linux-app"><img src="docs/screenshots/linux.gif" width="100%"></a><br><sub><b>Linux</b> — GTK4</sub></td>
 </tr>
 </table>
 
-## Add vero to your own macOS app
+## macOS: Add vero to your own macOS app
 
 ### 1. The go worker
 
@@ -205,7 +205,7 @@ struct ContentView: View {
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-## Add the same worker to a Windows app
+## Windows: Add the same worker to a Windows app
 
 The `main.go` from step 1 is unchanged, and every step below runs on your
 Mac. Only step 4 needs Windows.
@@ -376,7 +376,7 @@ No Windows machine? `./scripts/run-windows.sh` boots one in a VM on your Mac
 with this build on a disc. [example/wpf-app](example/wpf-app) is the same app,
 styled.
 
-## Add the same worker to a Linux app
+## Linux: Add the same worker to a Linux app
 
 The `main.go` from step 1 is unchanged, and every step below runs on your Mac
 as well. The library is built in a container, because `-buildmode=c-shared` on
