@@ -86,18 +86,18 @@ func main() {
 		}
 	})
 
-	jobs.Act("addJob", func(s *Status) error {
+	jobs.Update("addJob", func(s *Status) error {
 		n := len(s.Jobs) + 1
 		s.Jobs = append(s.Jobs, Job{ID: n, Name: fmt.Sprintf("Job %d", n)})
 		return nil
 	})
 
-	vero.EditItem(jobs, "restartJob", func(j *Job) error {
+	jobs.UpdateItem("restartJob", func(j *Job) error {
 		j.Progress = 0
 		return nil
 	})
 
-	vero.EditItem(jobs, "pauseJob", func(j *Job) error {
+	jobs.UpdateItem("pauseJob", func(j *Job) error {
 		j.Paused = !j.Paused
 		return nil
 	})

@@ -89,7 +89,7 @@ func (w *Worker) NewState[T any](initial T) *State[T] {
 // work: anything slow belongs in a goroutine the handler starts, writing back
 // through Do.  A handler that replies with something other than the state is
 // Worker.Handle.
-func (s *State[T]) Update[Req any](name string, fn func(state *T, request Req) error) {
+func (s *State[T]) UpdateWith[Req any](name string, fn func(state *T, request Req) error) {
 	s.w.Handle(name, func(_ context.Context, request Req) (json.RawMessage, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -186,12 +186,12 @@ func Edit[T Keyed[K], K comparable](items []T, key K, change func(*T)) error {
 	return nil
 }
 
-// EditItem answers a request that names one item and changes it, which is what
-// a button on a row sends.
+// UpdateItem answers a request that names one item and changes it, which is
+// what a button on a row sends.
 //
 //	func (j *Job) Pause() error { j.Paused = !j.Paused; return nil }
 //
-//	vero.EditItem(jobs, "pauseJob", (*Job).Pause)
+//	jobs.UpdateItem("pauseJob", (*Job).Pause)
 //
 // The request is an ID, the item is found by Key, change runs under the lock
 // with a pointer into the state, and the reply is the new state.  A request
@@ -201,9 +201,9 @@ func Edit[T Keyed[K], K comparable](items []T, key K, change func(*T)) error {
 // field, or the state itself when it is a []J.  A state with two fields of the
 // same item type cannot say which, and says so at registration rather than
 // guessing.
-func EditItem[T any, J Keyed[K], K comparable](s *State[T], name string, change func(*J) error) {
+func (s *State[T]) UpdateItem[J Keyed[K], K comparable](name string, change func(*J) error) {
 	field := itemsField[T, J]()
-	s.Update(name, func(state *T, req ID[K]) error {
+	s.UpdateWith(name, func(state *T, req ID[K]) error {
 		item, err := Find(field(state), req.ID)
 		if err != nil {
 			return err
@@ -241,16 +241,17 @@ func itemsField[T any, J any]() func(*T) []J {
 	}
 }
 
-// Act answers a request that carries nothing - a button with no payload - and
-// replies with the state.
+// Update answers a request that carries nothing - a button with no payload -
+// changes the state, and replies with it.
 //
 //	func (s *Status) Add() error { … }
 //
-//	jobs.Act("addJob", (*Status).Add)
+//	jobs.Update("addJob", (*Status).Add)
 //
-// Update is the same thing for a request that carries something.
-func (s *State[T]) Act(name string, fn func(*T) error) {
-	s.Update(name, func(state *T, _ struct{}) error { return fn(state) })
+// UpdateWith is the same for a request that carries something, and UpdateItem
+// for one that names an item.
+func (s *State[T]) Update(name string, fn func(*T) error) {
+	s.UpdateWith(name, func(state *T, _ struct{}) error { return fn(state) })
 }
 
 // WithID gives an item the id the interface names it by, and the Key that

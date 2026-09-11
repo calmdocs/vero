@@ -95,13 +95,13 @@ func main() {
 
 	// Something opened a window and needs to draw it now: no change, and the
 	// reply is the state.
-	state.Act("status", func(*Status) error { return nil })
+	state.Update("status", func(*Status) error { return nil })
 
 	// The button on a row names one job.  Update rather than EditItem, because
 	// Working is derived from every job and has to be recomputed after the
 	// change.  A request naming a job that is gone is refused, and the worker
 	// carries on: a bad request and a broken worker want different responses.
-	state.Update("restartJob", func(s *Status, req vero.ID[int]) error {
+	state.UpdateWith("restartJob", func(s *Status, req vero.ID[int]) error {
 		if err := vero.Edit(s.Jobs, req.ID, (*Job).Restart); err != nil {
 			// vero says "no item"; an interface should hear what this
 			// application calls the thing.
@@ -149,7 +149,7 @@ func handle(state *vero.State[Status]) vero.Handler {
 
 // version is what -version reports. An interface compares it with the copy it
 // has on disk, so it has to increase on every release.
-var version = "0.5.0"
+var version = "0.6.0"
 
 // work is the pretend business logic: it moves jobs along and says so.
 func work(w *vero.Worker, state *vero.State[Status]) {
