@@ -2,6 +2,7 @@
 
 **A Go backend with native macOS, Windows and Linux frontends. All built on macOS.**
 
+[The worker](#the-worker) ·
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
@@ -16,9 +17,10 @@
 </tr>
 </table>
 
-## macOS: Add vero to your own macOS app
+## The worker
 
-### 1. The go worker
+All three platforms drive this same Go program. Each section below builds it
+for its own platform.
 
 ```bash
 mkdir worker && cd worker
@@ -119,7 +121,11 @@ func main() {
 }
 ```
 
-Build it as one universal binary:
+## macOS: Add vero to your own macOS app
+
+### 1. Build the worker
+
+In the `worker` directory:
 
 ```bash
 GOOS=darwin GOARCH=amd64 go build -o worker-amd64 && \
@@ -127,13 +133,13 @@ GOOS=darwin GOARCH=arm64 go build -o worker-arm64 && \
 lipo -create worker-amd64 worker-arm64 -output worker
 ```
 
-That is the only binary you build. The C archive vero links ships with the
-Swift package.
-
 ### 2. The macOS SwiftUI app
 
-Create a new macOS SwiftUI project, then File -> Add Package Dependencies... ->
-`https://github.com/calmdocs/vero`, and drag `worker` into the project.
+Create a new macOS SwiftUI project. Then:
+
+- File -> Add Package Dependencies... -> `https://github.com/calmdocs/vero`
+- drag `worker/worker` into the project, ticking your app under **Add to
+  targets**, which is what puts it in the bundle for `bundledWorker:` to find
 
 Replace `ContentView.swift` with this:
 
@@ -201,13 +207,13 @@ struct ContentView: View {
 
 ### 3. Run it
 
-Two jobs appear and their progress climbs. **Add job** puts a third in the
-list, and the arrow beside a job sends it back to the beginning.
+Press Cmd-R. Two jobs appear and their progress climbs. **Add job** puts a
+third in the list. The refresh button beside a job sets that job's progress
+back to zero.
 
 ## Windows: Add the same worker to a Windows app
 
-The `main.go` from step 1 is unchanged, and every step below runs on your
-Mac. Only step 4 needs Windows.
+Every step below runs on your Mac. Only step 4 needs Windows, on ARM.
 
 Install these once:
 
@@ -216,16 +222,9 @@ Install these once:
 | The .NET SDK | `brew install --cask dotnet-sdk` |
 | A Windows ARM64 C compiler | unpack the `macos-universal` release of [llvm-mingw](https://github.com/mstorsjo/llvm-mingw/releases) into `~/toolchains/llvm-mingw` |
 
-Match the Windows machine you will run on, not the Mac you are building on.
-Every step below targets ARM. For an x64 machine, three things change:
+### 1. Build the worker and the library
 
-- the compiler is `x86_64-w64-mingw32-gcc`, from `brew install mingw-w64`
-- both commands in step 1 take `GOARCH=amd64`
-- step 3 publishes `-r win-x64`
-
-### 1. The go worker, and the library
-
-In the `worker` directory from step 1:
+In the `worker` directory:
 
 ```bash
 CGO_ENABLED=1 GOOS=windows GOARCH=arm64 \
@@ -236,9 +235,14 @@ CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o worker.exe .
 
 ### 2. The Windows WPF app
 
-Make a directory beside `worker` and copy
-[bindings/csharp/Vero.cs](bindings/csharp/Vero.cs) into it. Add these four
-files:
+Make a directory beside `worker`, and fetch the C# binding into it:
+
+```bash
+mkdir ../wpf-app && cd ../wpf-app
+curl -O https://raw.githubusercontent.com/calmdocs/vero/main/bindings/csharp/Vero.cs
+```
+
+Add these four files beside it:
 
 `VeroExample.csproj`:
 
@@ -367,15 +371,15 @@ looks for `worker.exe` beside the executable.
 
 ### 4. Run it
 
-Copy `out/` to a Windows machine and run `VeroExample.exe`. Two jobs appear
-and their progress climbs. **Add job** puts a third in the list, and the arrow
-beside a job sends it back to the beginning.
+Copy `out/` to a Windows on ARM machine and run `VeroExample.exe`. Two jobs appear
+and their progress climbs. **Add job** puts a third in the list. The refresh
+button beside a job sets that job's progress back to zero.
 
 ## Linux: Add the same worker to a Linux app
 
-The `main.go` from step 1 is unchanged, and every step below runs on your Mac
-as well. The library is built in a container, because `-buildmode=c-shared` on
-a Mac emits a Mach-O dylib rather than an ELF shared object.
+Every step below runs on your Mac. The library is built in a container,
+because `-buildmode=c-shared` on a Mac emits a Mach-O dylib rather than an ELF
+shared object.
 
 Install Docker once:
 
@@ -383,11 +387,11 @@ Install Docker once:
 brew install colima docker && colima start
 ```
 
-### 1. The go worker, and the library
+### 1. Build the worker and the library
 
-Run these in the `worker` directory from step 1, which has to sit somewhere
-under your home directory: colima shares only `$HOME` with the container, so a
-build mounted from anywhere else finishes without error and leaves no files.
+Run these in the `worker` directory. It has to sit under your home directory:
+colima shares only `$HOME` with the container, so a build mounted from anywhere
+else finishes without error and leaves no files.
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src \
@@ -400,11 +404,12 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o worker-linux .
 
 ### 2. The Linux GTK4 app
 
-Make a directory beside `worker` and copy
-[bindings/python/vero.py](bindings/python/vero.py) into it, along with the two
-files from step 1:
+Make a directory beside `worker`, fetch the Python binding into it, and bring
+the two files from step 1 with you:
 
 ```bash
+mkdir ../gtk-app && cd ../gtk-app
+curl -O https://raw.githubusercontent.com/calmdocs/vero/main/bindings/python/vero.py
 cp ../worker/libvero.so .
 cp ../worker/worker-linux worker
 ```
@@ -508,7 +513,7 @@ open vnc://localhost:5901
 ```
 
 Two jobs appear and their progress climbs. **Add job** puts a third in the
-list, and the arrow beside a job sends it back to the beginning.
+list. The refresh button beside a job sets that job's progress back to zero.
 
 ## The examples in this repository
 
