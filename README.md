@@ -5,6 +5,7 @@
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
+[Shipping it](#shipping-it) ·
 [All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
 [More](#more) ·
 [Tests](#tests)
@@ -517,6 +518,43 @@ list, and the arrow beside a job sends it back to the beginning.
 
 [example/gtk-app](example/gtk-app) is the same app, styled.
 `./scripts/run-linux.sh` runs it this way in one command.
+
+## Shipping it
+
+The three sections above run the app on your own machine. Three things change
+when someone else runs it.
+
+### 1. Handle the three failures
+
+| | | |
+|---|---|---|
+| **refused** | your handler returned an error | show it |
+| **notRunning** | the worker is starting or restarting | retry |
+| **alreadyRunning** | another copy of your app has the worker | say so, and do not retry |
+
+The names are `VeroError.refused(let message)`, `.notRunning` and
+`.alreadyRunning(let message)` in Swift; `Refused`, `NotRunning` and
+`AlreadyRunning` in Python; `RefusedException`, `NotRunningException` and
+`AlreadyRunningException` in C#.
+
+### 2. One worker at a time
+
+Your app in `/Applications` and the copy still in `~/Downloads` are two
+processes, and the user can open both. Each copies the worker to the same path,
+so the first to start takes the lock and the second gets `alreadyRunning`
+rather than a second worker writing the same state as the first.
+
+The lock is on by default, keyed on the worker's path, and the operating system
+releases it when the process exits, including after a crash.
+
+### 3. One interface per worker
+
+The interface talks to the worker down the standard input and output it created
+when it launched it, so no other process can. Several clients attached to one
+running worker needs a socket instead:
+[keyexchange](https://github.com/calmdocs/keyexchange) and
+[SwiftKeyExchange](https://github.com/calmdocs/SwiftKeyExchange) are the
+calmdocs libraries for that.
 
 ## Set up and run all three apps in three lines
 
