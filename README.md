@@ -7,7 +7,7 @@
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
-[Examples](#the-examples-in-this-repository)
+[Run the examples](#run-the-examples)
 
 <table>
 <tr>
@@ -596,7 +596,7 @@ open vnc://localhost:5901
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list. The refresh button beside a job sets that job's progress back to zero.
 
-## The examples in this repository
+## Run the examples
 
 Each is the app built above, with job phases and a status footer added. Each
 can also be run by itself from your Mac:
