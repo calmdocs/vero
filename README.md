@@ -5,8 +5,7 @@
 [macOS](#macos-add-vero-to-your-own-macos-app) ·
 [Windows](#windows-add-the-same-worker-to-a-windows-app) ·
 [Linux](#linux-add-the-same-worker-to-a-linux-app) ·
-[All three at once](#set-up-and-run-all-three-apps-in-three-lines) ·
-[More](#more) ·
+[Examples](#the-examples-in-this-repository) ·
 [Tests](#tests)
 
 <table>
@@ -372,10 +371,6 @@ Copy `out/` to a Windows machine and run `VeroExample.exe`. Two jobs appear
 and their progress climbs. **Add job** puts a third in the list, and the arrow
 beside a job sends it back to the beginning.
 
-No Windows machine? `./scripts/run-windows.sh` boots one in a VM on your Mac
-with this build on a disc. [example/wpf-app](example/wpf-app) is the Windows
-example in full: the same app with job phases and a status footer.
-
 ## Linux: Add the same worker to a Linux app
 
 The `main.go` from step 1 is unchanged, and every step below runs on your Mac
@@ -515,11 +510,9 @@ open vnc://localhost:5901
 Two jobs appear and their progress climbs. **Add job** puts a third in the
 list, and the arrow beside a job sends it back to the beginning.
 
-[example/gtk-app](example/gtk-app) is the Linux example in full: the same app
-with job phases and a status footer. `./scripts/run-linux.sh` runs it this way
-in one command.
+## The examples in this repository
 
-## Set up and run all three apps in three lines
+All three at once:
 
 ```bash
 git clone https://github.com/calmdocs/vero && cd vero
@@ -530,11 +523,14 @@ git clone https://github.com/calmdocs/vero && cd vero
 `--iso` is a Windows 11 Arm64 ISO, needed only the first time: `run.sh`
 installs Windows into a VM once and reuses it after that.
 
-## More
+Each is the app built above with job phases and a status footer added, and each
+runs on its own from your Mac:
 
 | | |
 |---|---|
-| [example/menubar-app](example/menubar-app) | the macOS example in full (SwiftUI) |
+| [example/menubar-app](example/menubar-app) | macOS, SwiftUI |
+| [example/wpf-app](example/wpf-app) | Windows, WPF — `./scripts/run-windows.sh` boots a VM with it on a disc |
+| [example/gtk-app](example/gtk-app) | Linux, GTK4 — `./scripts/run-linux.sh` runs it in a container, opened in Screen Sharing |
 
 ## Tests
 
