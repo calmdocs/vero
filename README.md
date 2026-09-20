@@ -1,0 +1,231 @@
+# vero
+
+**Go backend with a native cross-platform GUI frontend -> macOS, Windows, and
+Linux**
+
+Run a Go binary embedded in a native macOS SwiftUI app. The Go binary and the
+SwiftUI app communicate over a pipe.  The macOS SwiftUI frontend app sends
+requests, and the Go worker pushes its state back the instant it changes.
+
+Then use the same Go code backend with Windows and Linux frontends.
+
+[![Go reference](https://pkg.go.dev/badge/github.com/calmdocs/vero.svg)](https://pkg.go.dev/github.com/calmdocs/vero)
+
+<table>
+<tr>
+<td align="center" width="33%"><a href="#run-the-macos-example"><img src="docs/screenshots/macos.gif" width="100%"></a><br><sub><b>macOS</b> — SwiftUI, in the menu bar</sub></td>
+<td align="center" width="33%"><a href="example/wpf-app"><img src="docs/screenshots/windows.gif" width="100%"></a><br><sub><b>Windows</b> — WPF</sub></td>
+<td align="center" width="33%"><a href="example/gtk-app"><img src="docs/screenshots/linux.gif" width="100%"></a><br><sub><b>Linux</b> — GTK4</sub></td>
+</tr>
+</table>
+
+[macOS example](#run-the-macos-example) ·
+[Windows and Linux examples](#build-the-same-worker-for-windows-and-linux)
+
+If you already have Xcode and Go installed, the example below builds a running
+app in about 5 minutes.
+
+## Run the macOS example
+
+The example is a menu bar app driving the Go worker (main.go below):
+
+```bash
+git clone https://github.com/calmdocs/vero && cd vero
+cd example/menubar-app && ./build.sh
+./.build/debug/MenuBarExample
+```
+
+Look for the icon in the menu bar. The source is available at
+[example/menubar-app](example/menubar-app).
+
+## Create a vero macOS app on your Mac
+
+### 1. Build the go worker
+
+Get vero:
+
+```bash
+mkdir -p ~/vero-example/macos-app && cd ~/vero-example/macos-app
+go mod init macos-app
+go get github.com/calmdocs/vero
+```
+
+Create `main.go` (file also available at
+[example/worker/main.go](example/worker/main.go)):
+
+```go
+// Command worker is the logic half of the example: the part you would write.
+//
+// The flags come from vero.WorkerOptions: -json puts the event stream on
+// stdout, -quiet silences the log, and -version is what the frontend asks
+// before replacing the copy of this it has on disk.
+package main
+
+import (
+	"flag"
+	"fmt"
+	"math/rand"
+	"slices"
+	"time"
+
+	"github.com/calmdocs/vero"
+)
+
+// version has to increase on every release, so the frontend can tell which
+// of two copies is newer.
+var version = "0.9.2"
+
+type Job struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Phase    string `json:"phase"`
+	Progress int    `json:"progress"`
+}
+
+// Key is how an id in a request finds one job.
+func (j Job) Key() int { return j.ID }
+
+func (j *Job) Restart() { j.Phase, j.Progress = "waiting", 0 }
+
+type Status struct {
+	Jobs    []Job  `json:"jobs"`
+	Working bool   `json:"working"`
+	Since   string `json:"since"`
+}
+
+func working(s *Status) {
+	s.Working = slices.ContainsFunc(s.Jobs, func(j Job) bool {
+		return j.Phase != "waiting" && j.Phase != "done"
+	})
+}
+
+func main() {
+	var opts vero.WorkerOptions
+	opts.Version = version
+	opts.RegisterFlags(flag.CommandLine)
+	flag.Parse()
+	opts.PrintVersionAndExit()
+
+	w := vero.NewWorker(opts)
+
+	// The state.  vero watches it and sends it to the frontend whenever its
+	// JSON changes, which is how the frontend tracks status without asking.
+	// Each handler below replies with it as well.
+	state := vero.NewState(w, Status{
+		Jobs: []Job{
+			{ID: 1, Name: "Photos", Phase: "waiting"},
+			{ID: 2, Name: "Documents", Phase: "waiting"},
+			{ID: 3, Name: "Team share", Phase: "waiting"},
+		},
+		Since: time.Now().Format("15:04:05"),
+	})
+
+	go work(w, state)
+
+	// Update handles a request with no accompanying data.  "status" returns
+	// the state.
+	vero.Update(state, "status", func(*Status) error { return nil })
+
+	// UpdateWith handles a request with accompanying data.  "restartJob"
+	// takes the id of the job to restart.
+	vero.UpdateWith(state, "restartJob", func(s *Status, req vero.ID[int]) error {
+		if err := vero.Edit(s.Jobs, req.ID, (*Job).Restart); err != nil {
+			return fmt.Errorf("no job with id %d", req.ID)
+		}
+		working(s)
+		return nil
+	})
+
+	if err := w.Serve(); err != nil {
+		w.Log("stopped: %v", err)
+	}
+}
+
+// work is the business logic - we have added random state changes to
+// demonstrate how this works.
+func work(w *vero.Worker, state *vero.State[Status]) {
+	phases := []string{"looking for changes", "scanning", "uploading", "done"}
+	for {
+		time.Sleep(time.Duration(200+rand.Intn(400)) * time.Millisecond)
+
+		var name, phase, before string
+		state.Do(func(s *Status) {
+			j := &s.Jobs[rand.Intn(len(s.Jobs))]
+			before = j.Phase
+			switch i := slices.Index(phases, j.Phase); {
+			case j.Phase == "waiting" || j.Phase == "done":
+				j.Phase, j.Progress = phases[0], 0
+			case j.Progress < 100:
+				j.Progress = min(j.Progress+20+rand.Intn(30), 100)
+			case i+1 < len(phases):
+				j.Phase, j.Progress = phases[i+1], 0
+			}
+			name, phase = j.Name, j.Phase
+			working(s)
+		})
+
+		if phase != before {
+			w.Log("%s: %s", name, phase)
+		}
+	}
+}
+```
+
+Build it for both architectures and join them into one binary, so the app runs
+on either. `lipo` comes with Xcode:
+
+```bash
+GOOS=darwin GOARCH=amd64 go build -o worker-amd64 . && \
+GOOS=darwin GOARCH=arm64 go build -o worker-arm64 . && \
+lipo -create worker-amd64 worker-arm64 -output worker
+```
+
+### 2. Create a new macOS SwiftUI Xcode project
+
+In Xcode, File -> New -> Project -> macOS -> App, with Interface set to
+SwiftUI. Then:
+
+- File -> Add Package Dependencies... -> `https://github.com/calmdocs/vero`
+- drag `~/vero-example/macos-app/worker` into the project, ticking your app
+  under **Add to targets**
+
+### 3. Add the app's files to the project
+
+The app is
+[Model.swift](example/menubar-app/Sources/MenuBarExample/Model.swift) and
+[MenuBarExampleApp.swift](example/menubar-app/Sources/MenuBarExample/MenuBarExampleApp.swift).
+Download both:
+
+```bash
+cd ~/vero-example/macos-app
+base=https://raw.githubusercontent.com/calmdocs/vero/main/example/menubar-app/Sources/MenuBarExample
+curl -O $base/Model.swift
+curl -O $base/MenuBarExampleApp.swift
+```
+
+Drag them into the Xcode project, and delete the `ContentView.swift` and
+`<YourApp>App.swift` that Xcode generated: `MenuBarExampleApp.swift` is the
+`@main` entry point.
+
+### 4. Run it
+
+Press Cmd-R in Xcode. The icon appears in the menu bar, and spins while the
+worker has jobs in flight. Click the menu bar icon to see progress changes.
+Click the button on a row to restart that job.
+
+## Build the same worker for Windows and Linux
+
+Both can be built on your Mac:
+
+| | |
+|---|---|
+| [example/wpf-app](example/wpf-app) | Windows, WPF |
+| [example/gtk-app](example/gtk-app) | Linux, GTK4 |
+
+To see all three at once instead, `./scripts/setup.sh` installs the toolchains
+for every platform and builds everything, and `./scripts/run.sh` then opens the
+three examples together on your Mac.
+
+## Licence
+
+MIT

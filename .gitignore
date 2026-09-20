@@ -1,0 +1,16 @@
+.build/
+*.a
+*.h
+!Sources/CVero/include/*.h
+example/menubar-app/worker
+__pycache__/
+*.so
+*.dylib
+*.dll
+example/gtk-app/worker
+.linuxbuild/
+.windows/unattend/unattend.iso
+/dist/
+.gifframes.*
+example/wpf-app/bin/
+example/wpf-app/obj/
