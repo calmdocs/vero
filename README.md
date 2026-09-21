@@ -244,7 +244,7 @@ struct ExampleApp: App {
                     }
                 }
             }
-            .frame(width: 380)
+            .frame(width: 460)
             .padding(16)
         } label: {
             // Pushed as well, so the icon spins while the worker is busy

@@ -42,7 +42,18 @@ mkdir -p "$VM"
 ARM_CC=$(command -v aarch64-w64-mingw32-clang 2>/dev/null || true)
 [ -z "$ARM_CC" ] && [ -x "$HOME/toolchains/llvm-mingw/bin/aarch64-w64-mingw32-clang" ] \
     && ARM_CC="$HOME/toolchains/llvm-mingw/bin/aarch64-w64-mingw32-clang"
-if [ -z "$PAYLOAD" ] && { [ ! -f "$ROOT/dist/vero-arm64.dll" ] || [ ! -f "$ROOT/dist/worker-windows-arm64.exe" ]; }; then
+# Rebuild when a source file is newer than what was built from it.  Checking
+# only that the file exists is how a months-old dist/ ends up on the disc,
+# which looks exactly like the current build until the worker reports its
+# version.
+stale() {
+    target=$1; shift
+    [ -f "$target" ] || return 0
+    [ -n "$(find "$@" -newer "$target" -print -quit 2>/dev/null)" ]
+}
+
+if [ -z "$PAYLOAD" ] && { stale "$ROOT/dist/vero-arm64.dll" "$ROOT"/*.go "$ROOT/cshim" ||
+                         stale "$ROOT/dist/worker-windows-arm64.exe" "$ROOT"/*.go "$ROOT/example/worker"; }; then
     [ -n "$ARM_CC" ] || { echo "need llvm-mingw for windows/arm64 - see example/wpf-app/README.md" >&2; exit 1; }
     echo "building the Windows pieces"
     mkdir -p "$ROOT/dist"
@@ -55,8 +66,9 @@ if [ -z "$PAYLOAD" ] && { [ ! -f "$ROOT/dist/vero-arm64.dll" ] || [ ! -f "$ROOT/
 fi
 DOTNET=$(command -v dotnet 2>/dev/null || true)
 [ -z "$DOTNET" ] && [ -x "$HOME/.dotnet/dotnet" ] && DOTNET="$HOME/.dotnet/dotnet"
-if [ -z "$PAYLOAD" ] && [ ! -d "$ROOT/dist/wpf-arm64" ] && [ -n "$DOTNET" ]; then
-    echo "publishing the WPF example (once; a minute or two)"
+if [ -z "$PAYLOAD" ] && [ -n "$DOTNET" ] &&
+   stale "$ROOT/dist/wpf-arm64/VeroExample.exe" "$ROOT/example/wpf-app" "$ROOT/bindings/csharp"; then
+    echo "publishing the WPF example (a minute or two)"
     ( cd "$ROOT/example/wpf-app" && "$DOTNET" publish -c Release -r win-arm64 \
         --self-contained -p:EnableWindowsTargeting=true -o "$ROOT/dist/wpf-arm64" -v quiet ) >/dev/null
 fi
