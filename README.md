@@ -189,21 +189,98 @@ SwiftUI. Then:
 - drag `~/vero-example/macos-app/worker` into the project, ticking your app
   under **Add to targets**
 
-### 3. Add the app's files to the project
+### 3. Add the app to the project
 
-The app is
-[Model.swift](example/menubar-app/Sources/MenuBarExample/Model.swift) and
+The Swift side is one file, and this is the part of it that matters. The types
+mirror the Go structs above, the request names the handler it is routed to, and
+the button sends it:
+
+```swift
+import SwiftUI
+import Vero
+
+// What the worker pushes: the same shape as Status and Job in main.go.
+struct Job: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let phase: String
+    let progress: Int
+}
+
+struct Status: Decodable {
+    let jobs: [Job]
+    let working: Bool
+    let since: String
+}
+
+// One of these per handler on the worker. The name routes the request -
+// "restartJob" is the vero.UpdateWith above - and Reply says what comes back,
+// so nothing has to guess at it.
+struct RestartJob: NamedRequest {
+    static let name = "restartJob"
+    typealias Reply = Status
+    let id: Int
+}
+
+@main
+struct ExampleApp: App {
+    // The worker, the last state it pushed, and the reason it could not start
+    // if it did not: everything a view needs to draw, created once, here.
+    @StateObject private var vero = VeroModel<Status>(
+        bundledWorker: "worker", directoryName: "Example/bin")
+
+    var body: some Scene {
+        MenuBarExtra {
+            VStack(spacing: 10) {
+                ForEach(vero.state?.jobs ?? []) { job in
+                    HStack(spacing: 10) {
+                        // The press. This goes to the "restartJob" handler in
+                        // main.go. There is no reply to deal with here,
+                        // because the worker pushes the new state, and that
+                        // is what redraws the row.
+                        Button("Restart") { vero.call(RestartJob(id: job.id)) }
+                        Text(job.name)
+                        Text(job.phase).foregroundStyle(.secondary)
+                        ProgressView(value: Double(job.progress) / 100)
+                    }
+                }
+            }
+            .frame(width: 380)
+            .padding(16)
+        } label: {
+            // Pushed as well, so the icon spins while the worker is busy
+            // without anything here asking it whether it is.
+            Image(systemName: vero.state?.working == true
+                  ? "arrow.triangle.2.circlepath"
+                  : "checkmark.circle")
+        }
+        .menuBarExtraStyle(.window)
+    }
+}
+```
+
+That is the whole round trip: press the button -> `restartJob` -> the worker
+edits its state -> vero pushes the new state -> the row redraws. Nothing polls,
+and nothing here has to keep a copy of the worker's state in step by hand.
+
+A caller that wants the reply itself rather than the state that follows it can
+wait for it instead, from anywhere that can await:
+
+```swift
+let status = try await vero.call(RestartJob(id: job.id))
+```
+
+The example file is that app with the job icons, a footer showing whether the
+worker is running, and a window used to record the screenshots above:
 [MenuBarExampleApp.swift](example/menubar-app/Sources/MenuBarExample/MenuBarExampleApp.swift).
-Download both:
+Download it:
 
 ```bash
 cd ~/vero-example/macos-app
-base=https://raw.githubusercontent.com/calmdocs/vero/main/example/menubar-app/Sources/MenuBarExample
-curl -O $base/Model.swift
-curl -O $base/MenuBarExampleApp.swift
+curl -O https://raw.githubusercontent.com/calmdocs/vero/main/example/menubar-app/Sources/MenuBarExample/MenuBarExampleApp.swift
 ```
 
-Drag them into the Xcode project, and delete the `ContentView.swift` and
+Drag it into the Xcode project, and delete the `ContentView.swift` and
 `<YourApp>App.swift` that Xcode generated: `MenuBarExampleApp.swift` is the
 `@main` entry point.
 
