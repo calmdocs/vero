@@ -1,33 +1,20 @@
 using System;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using Vero;
 
 namespace VeroExample;
 
+// What the worker pushes: the same shape as Status and Job in main.go.
 public record Job(
     [property: JsonPropertyName("id")]       int Id,
     [property: JsonPropertyName("name")]     string Name,
     [property: JsonPropertyName("phase")]    string Phase,
-    [property: JsonPropertyName("progress")] int Progress)
-{
-    // A word rather than a number: "uploading" says more about what is
-    // happening than 62% does.
-    public string Icon => Name switch
-    {
-        "Photos" => "▣",
-        "Documents" => "▤",
-        "Team share" => "▥",
-        _ => "□",
-    };
-
-}
+    [property: JsonPropertyName("progress")] int Progress);
 
 public record Status(
     [property: JsonPropertyName("jobs")]    Job[] Jobs,
@@ -50,7 +37,6 @@ public partial class MainWindow : Window
 
         // Pushed the instant anything changes, so nothing polls.
         _ = ReadEvents();
-        _ = ReadState();
     }
 
     private async System.Threading.Tasks.Task ReadEvents()
@@ -66,35 +52,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private async System.Threading.Tasks.Task ReadState()
-    {
-        while (true)
-        {
-            var state = _vero.State();
-            Dispatcher.Invoke(() =>
-            {
-                StateText.Text = state;
-                StateDot.Fill = new SolidColorBrush(state == "running"
-                    ? Color.FromRgb(0x5C, 0x9E, 0x75)
-                    : Color.FromRgb(0xC2, 0x8C, 0x4A));
-            });
-            await System.Threading.Tasks.Task.Delay(1000);
-        }
-    }
-
     private void Apply(Status status)
     {
         _jobs.Clear();
         foreach (var job in status.Jobs) _jobs.Add(job);
-        JobCount.Text = $"{status.Jobs.Length} job{(status.Jobs.Length == 1 ? "" : "s")}";
     }
 
-    /// <summary>The icon at the left of a row: start that job again.</summary>
-    /// <remarks>
-    /// CallAsync names the handler on the worker - "restartJob" is registered
-    /// there with vero.Handle - and the reply is the new status, so the window
-    /// redraws without waiting for the next event.
-    /// </remarks>
+    // CallAsync names the handler on the worker - "restartJob" is the
+    // vero.UpdateWith in main.go - and the reply is the new status, so the
+    // window redraws without waiting for the next event.
     private async void Restart_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || button.Tag is not int id) return;
@@ -102,26 +68,9 @@ public partial class MainWindow : Window
         {
             Apply(await _vero.CallAsync<object, Status>("restartJob", new { id }));
         }
-        catch (RefusedException refused)
-        {
-            // The worker got it and said no. It is still there, so this is
-            // worth showing; "not running" would not be.
-            StateText.Text = refused.Message;
-        }
         catch (VeroException)
         {
-            // notRunning is already visible through the state dot.
+            // The worker refused it, or is restarting. The next event redraws.
         }
-    }
-
-    private void Quit_Click(object sender, RoutedEventArgs e) => Close();
-
-    protected override void OnClosing(CancelEventArgs e)
-    {
-        // Not required - the worker's standard input closes when this process
-        // exits and it stops with it, crash included - but it ends the work a
-        // moment sooner.
-        _vero.Stop();
-        base.OnClosing(e);
     }
 }
