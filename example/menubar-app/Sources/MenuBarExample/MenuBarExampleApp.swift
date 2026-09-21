@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 import SwiftUI
 import Vero
@@ -60,15 +59,31 @@ var workerName: String {
 
 // MARK: - The app
 
+/// The worker, the last state it pushed, and everything a view needs to draw
+/// both.
+///
+/// Named here rather than written straight into the `@StateObject` below only
+/// because the screenshot window wants the same instance as the panel.  An
+/// app without one writes the initialiser inline, as the README does.
+@MainActor let veroModel = VeroModel<Status>(
+    bundledWorker: workerName, directoryName: "VeroMenuBarExample/bin")
+
 @main
 struct MenuBarExampleApp: App {
+    /// Held by the App, not by a view: a `@StateObject` here is created when
+    /// the scene tree is built, at launch, so the worker is running long
+    /// before anyone opens the panel.  Observing it here is also what keeps
+    /// the menu bar icon current - the whole scene redraws when the worker
+    /// pushes, so nothing has to forward the change by hand.
+    @StateObject private var vero = veroModel
+
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(vero: delegate.vero)
+            MenuView(vero: vero)
         } label: {
-            Image(systemName: delegate.vero.state?.working == true
+            Image(systemName: vero.state?.working == true
                   ? "arrow.triangle.2.circlepath"
                   : "checkmark.circle")
         }
@@ -76,31 +91,12 @@ struct MenuBarExampleApp: App {
     }
 }
 
+/// Two jobs, neither of them vero's: the window the README's screenshots are
+/// recorded in, and ending the worker a moment sooner on quit.  An app that
+/// wants neither has no delegate at all.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
-    /// The worker, the last state it pushed, and everything a view needs to
-    /// draw both.  Created here rather than when a view appears: a menu bar
-    /// app may go a long time before anyone opens its panel, and the worker
-    /// should be running before then.
-    let vero = VeroModel<Status>(
-        bundledWorker: workerName, directoryName: "VeroMenuBarExample/bin")
-
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingWindow: NSWindow?
-    private var forwarding: AnyCancellable?
-
-    /// ObservableObject, and forwarding, both for the menu bar label.
-    ///
-    /// @NSApplicationDelegateAdaptor only watches a delegate that is an
-    /// ObservableObject, and an ObservableObject is not republished by one it
-    /// holds - so without these two the icon reads `working` once, at launch,
-    /// and never changes again.  The panel is fine either way, because it
-    /// observes the model directly.
-    override init() {
-        super.init()
-        forwarding = vero.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send()
-        }
-    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
 
@@ -123,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             // Size to the view. A fixed height leaves empty space below the
             // last card, which a MenuBarExtra panel never shows because it
             // sizes itself to its content.
-            let hosting = NSHostingView(rootView: MenuView(vero: vero))
+            let hosting = NSHostingView(rootView: MenuView(vero: veroModel))
             hosting.sizingOptions = [.preferredContentSize]
             window.contentView = hosting
             window.setFrameOrigin(NSPoint(x: 100, y: 400))
@@ -139,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func applicationWillTerminate(_ notification: Notification) {
         // Not required - the worker's stdin closes when we exit and it stops
         // with us, even if we crash - but it ends the work a moment sooner.
-        vero.stop()
+        veroModel.stop()
     }
 }
 
