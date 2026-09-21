@@ -191,9 +191,8 @@ SwiftUI. Then:
 
 ### 3. Add the app to the project
 
-The Swift side is one file, and this is the part of it that matters. The types
-mirror the Go structs above, the request names the handler it is routed to, and
-the button sends it:
+Create `ExampleApp.swift` (fuller version also available at
+[MenuBarExampleApp.swift](example/menubar-app/Sources/MenuBarExample/MenuBarExampleApp.swift)):
 
 ```swift
 import SwiftUI
@@ -259,30 +258,8 @@ struct ExampleApp: App {
 }
 ```
 
-That is the whole round trip: press the button -> `restartJob` -> the worker
-edits its state -> vero pushes the new state -> the row redraws. Nothing polls,
-and nothing here has to keep a copy of the worker's state in step by hand.
-
-A caller that wants the reply itself rather than the state that follows it can
-wait for it instead, from anywhere that can await:
-
-```swift
-let status = try await vero.call(RestartJob(id: job.id))
-```
-
-The example file is that app with the job icons, a footer showing whether the
-worker is running, and a window used to record the screenshots above:
-[MenuBarExampleApp.swift](example/menubar-app/Sources/MenuBarExample/MenuBarExampleApp.swift).
-Download it:
-
-```bash
-cd ~/vero-example/macos-app
-curl -O https://raw.githubusercontent.com/calmdocs/vero/main/example/menubar-app/Sources/MenuBarExample/MenuBarExampleApp.swift
-```
-
-Drag it into the Xcode project, and delete the `ContentView.swift` and
-`<YourApp>App.swift` that Xcode generated: `MenuBarExampleApp.swift` is the
-`@main` entry point.
+Delete the `ContentView.swift` and `<YourApp>App.swift` that Xcode generated:
+`ExampleApp.swift` is the `@main` entry point.
 
 ### 4. Run it
 
