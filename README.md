@@ -191,8 +191,8 @@ SwiftUI. Then:
 
 ### 3. Add the app to the project
 
-Create `ExampleApp.swift` (fuller version also available at
-[MenuBarExampleApp.swift](example/menubar-app/Sources/MenuBarExample/MenuBarExampleApp.swift)):
+Create `ExampleApp.swift` (file also available at
+[example/menubar-app/…/ExampleApp.swift](example/menubar-app/Sources/MenuBarExample/ExampleApp.swift)):
 
 ```swift
 import SwiftUI
