@@ -5,7 +5,8 @@ builds the app in a container, runs it on a virtual display, and opens it in
 Screen Sharing:
 
 ```bash
-../../scripts/run-linux.sh
+git clone https://github.com/calmdocs/vero && cd vero
+./scripts/run-linux.sh
 ```
 
 ## Create a vero Linux app on your Mac

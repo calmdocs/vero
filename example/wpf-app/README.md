@@ -5,7 +5,8 @@ builds the app, puts it on a disc image, and boots a Windows VM which runs the
 app:
 
 ```bash
-../../scripts/run-windows.sh
+git clone https://github.com/calmdocs/vero && cd vero
+./scripts/run-windows.sh
 ```
 
 ## Create a vero Windows app on your Mac
