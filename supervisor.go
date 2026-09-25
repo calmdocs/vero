@@ -44,6 +44,18 @@ type SupervisorOptions struct {
 	Backoff    time.Duration
 	MaxBackoff time.Duration
 
+	// Healthy is how long a worker has to run before the restarts behind it
+	// are forgotten: the backoff returns to Backoff and Restarts returns to
+	// zero.  Zero means 30 seconds.
+	//
+	// Workers exit on purpose - to pick up a change to their configuration,
+	// or to run a version they have just downloaded - and one that served for
+	// an hour before doing so has told us nothing except that it is working.
+	// Without this the backoff climbs to MaxBackoff over a day of ordinary
+	// use, so an intentional exit costs half a minute of nothing, and any
+	// frontend watching the count concludes the worker is broken.
+	Healthy time.Duration
+
 	// Lock keys the single-worker lock: one process at a time supervises a
 	// worker under a given key.  Empty means the worker's own path, which is
 	// what you want unless two applications share a binary and should still
@@ -121,6 +133,9 @@ func Supervise(opts SupervisorOptions) *Supervisor {
 	if opts.MaxBackoff <= 0 {
 		opts.MaxBackoff = 30 * time.Second
 	}
+	if opts.Healthy <= 0 {
+		opts.Healthy = 30 * time.Second
+	}
 	s := &Supervisor{
 		opts:    opts,
 		pending: map[uint64]chan Envelope{},
@@ -159,7 +174,13 @@ func (s *Supervisor) State() RunState {
 	return s.state
 }
 
-// Restarts counts how many times the worker has been relaunched after dying.
+// Restarts counts how many times the worker has been relaunched without one
+// of them lasting: a worker that runs for Healthy and then exits, whatever its
+// reason, puts this back to zero.
+//
+// So it answers "is this worker failing to start", which is the question worth
+// asking, and not "how many times has it been started", which counts every
+// deliberate exit as evidence of a fault.
 func (s *Supervisor) Restarts() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -280,13 +301,26 @@ func (s *Supervisor) supervise() {
 		}
 
 		s.setState(Starting)
+		started := time.Now()
 		err := s.runOnce()
+		lasted := time.Since(started)
 
 		select {
 		case <-s.stop:
 			s.setState(Stopped)
 			return
 		default:
+		}
+
+		// A worker that ran is not a worker that cannot start.  Clearing the
+		// history here is what keeps an exit on purpose - a configuration
+		// change, a version it has just downloaded - from reading like the
+		// latest in a run of failures.
+		if lasted >= s.opts.Healthy {
+			backoff = s.opts.Backoff
+			s.mu.Lock()
+			s.restarts = 0
+			s.mu.Unlock()
 		}
 
 		s.mu.Lock()

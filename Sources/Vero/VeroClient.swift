@@ -32,9 +32,11 @@ public final class VeroClient: ObservableObject {
     /// progress look identical otherwise.
     @Published public private(set) var state: WorkerState = .starting
 
-    /// How many times the worker has been relaunched after dying. A single
-    /// restart is worth a log line; a climbing count means the binary itself
-    /// is the problem.
+    /// How many times the worker has been relaunched without one of them
+    /// lasting. A worker that runs for a while and then exits - to pick up a
+    /// change, or to run a version it has just downloaded - puts this back to
+    /// zero, so a climbing count means the binary itself is the problem and
+    /// not that the worker has a reason to restart.
     @Published public private(set) var restarts: Int = 0
 
     /// How many requests the frontend is waiting on.
@@ -187,44 +189,60 @@ public final class VeroClient: ObservableObject {
         }
     }
 
-    /// Puts the bundled worker back if it keeps restarting.
+    /// Puts the bundled worker back if it cannot stay up.
     ///
     /// The supervisor restarts a worker that died, but cannot tell that the
     /// binary on disk is the problem - a bad self-update, a truncated
-    /// download, a file that will not execute. This can: a worker that keeps
-    /// dying is one whose file is suspect, so the copy that shipped with the
-    /// application goes back.
+    /// download, a file that will not execute. This can: a worker that never
+    /// manages a full run is one whose file is suspect, so the copy that
+    /// shipped with the application goes back.
+    ///
+    /// It waits for ``restarts`` to reach `limit`, rather than acting on each
+    /// one. Workers exit deliberately - a changed configuration, a version
+    /// just downloaded - and restoring the shipped copy on one of those would
+    /// undo a self-update every time, which the worker would then redo,
+    /// which exits again. ``restarts`` counts only restarts with no healthy
+    /// run between them, so reaching `limit` means the worker really is
+    /// failing to start.
     ///
     /// Only useful when the worker came from ``init(bundledWorker:directoryName:supersededNames:arguments:)``;
     /// there is nothing to restore otherwise.
     ///
     /// - Parameters:
-    ///   - limit: restarts tolerated before the shipped worker is restored.
-    ///   - giveUp: called if it keeps restarting after that, so the frontend
-    ///     can say something rather than looping in silence.
+    ///   - limit: consecutive failed starts before the shipped worker is
+    ///     restored, and again before giving up on it.
+    ///   - giveUp: called if the shipped copy cannot stay up either, so the
+    ///     frontend can say something rather than looping in silence.
     public func restoreBundledWorkerAfterRepeatedRestarts(
         _ limit: Int = 3,
         giveUp: (@MainActor () -> Void)? = nil
     ) {
         guard let bundle else { return }
         watchers.append(Task { [weak self] in
-            var seen = 0
-            var attempts = 0
+            // The count when the shipped worker was put back, or zero while it
+            // has not been.
+            var restoredAt = 0
+
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 guard let self else { return }
 
                 let restarts = await MainActor.run { self.restarts }
-                guard restarts > seen else { continue }
-                seen = restarts
-                attempts += 1
 
-                if attempts > limit {
+                // The supervisor clears the count once a worker lasts, so a
+                // drop means the one running now is working.
+                if restarts < restoredAt { restoredAt = 0 }
+
+                guard restarts >= limit else { continue }
+
+                if restoredAt == 0 {
+                    if (try? bundle.restoreFromBundle()) != nil {
+                        print("vero: restored the bundled worker after \(restarts) restarts")
+                    }
+                    restoredAt = restarts
+                } else if restarts >= restoredAt + limit {
                     await MainActor.run { giveUp?() }
                     return
-                }
-                if (try? bundle.restoreFromBundle()) != nil {
-                    print("vero: restored the bundled worker after \(restarts) restarts")
                 }
             }
         })

@@ -305,6 +305,53 @@ func TestAWorkerCrashDoesNotTakeUsWithIt(t *testing.T) {
 	t.Fatalf("the worker never came back (restarts=%d state=%v)", s.Restarts(), s.State())
 }
 
+// Workers exit on purpose: to pick up a changed configuration, or to run a
+// version they have just downloaded.  Counting those with the crashes means
+// the backoff climbs to MaxBackoff over a day of ordinary use, and a frontend
+// watching Restarts eventually decides the worker is broken while it is doing
+// what it was asked to.
+//
+// Two deliberate exits, each after a healthy run, must therefore leave the
+// count at one rather than two.
+func TestAWorkerThatRanIsNotAWorkerThatFailed(t *testing.T) {
+	s := newSupervisor(t, &vero.SupervisorOptions{
+		Backoff: 20 * time.Millisecond,
+		Healthy: 100 * time.Millisecond,
+	})
+
+	serveThenExit := func(round int) {
+		if err := waitForWorker(s); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+		time.Sleep(150 * time.Millisecond) // longer than Healthy
+		s.Request(context.Background(), request{Type: "die"})
+	}
+
+	serveThenExit(1)
+	serveThenExit(2)
+
+	if err := waitForWorker(s); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Restarts(); got != 1 {
+		t.Fatalf("Restarts is %d, want 1: each exit followed a run that lasted", got)
+	}
+}
+
+// waitForWorker returns once a worker is up and answering.
+func waitForWorker(s *vero.Supervisor) error {
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if s.State() == vero.Running {
+			if _, err := s.Request(context.Background(), request{Type: "echo", N: 1}); err == nil {
+				return nil
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return fmt.Errorf("no worker answered (restarts=%d state=%v)", s.Restarts(), s.State())
+}
+
 func TestRequestBeforeTheWorkerIsUp(t *testing.T) {
 	s := vero.Supervise(vero.SupervisorOptions{Path: "/nonexistent/worker"})
 	t.Cleanup(func() { s.Stop() })
