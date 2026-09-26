@@ -1,7 +1,6 @@
 # vero
 
-**Go backend with a native cross-platform GUI frontend -> macOS, Windows, and
-Linux**
+**Go backend with native cross-platform GUI frontends.  Build on macOS.  Run on macOS, Windows, and Linux.**
 
 Run a Go binary embedded in a native macOS SwiftUI app. The Go binary and the
 SwiftUI app communicate over a pipe.  The macOS SwiftUI frontend app sends
