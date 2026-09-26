@@ -8,6 +8,9 @@ requests, and the Go worker pushes its state back the instant it changes.
 
 Then use the same Go code backend with Windows and Linux frontends.
 
+**The Go backend and the frontend communicate using pipes.**
+[How it works →](docs/pipes.md)
+
 [![Go reference](https://pkg.go.dev/badge/github.com/calmdocs/vero.svg)](https://pkg.go.dev/github.com/calmdocs/vero)
 
 <table>
